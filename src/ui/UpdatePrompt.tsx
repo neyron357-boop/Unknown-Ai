@@ -12,7 +12,7 @@ export function UpdatePrompt() {
   const [update, setUpdate] = useState<null | (() => void)>(null);
 
   useEffect(() => {
-    if (!import.meta.env.PROD || !('serviceWorker' in navigator)) return;
+    if (!import.meta.env.PROD || import.meta.env.VITE_TARGET === 'artifact' || !('serviceWorker' in navigator)) return;
     let cancelled = false;
     void import('virtual:pwa-register').then(({ registerSW }) => {
       if (cancelled) return;

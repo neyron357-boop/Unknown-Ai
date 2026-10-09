@@ -66,6 +66,13 @@ input:focus-visible {
   height: 100svh;
 }
 
+.artifact .app-height {
+  height: 100%;
+}
+.artifact #root > div {
+  height: 100%;
+}
+
 .safe-top {
   padding-top: max(var(--sat), 14px);
 }

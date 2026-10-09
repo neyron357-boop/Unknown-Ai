@@ -7,6 +7,9 @@ import type { Lang } from '@/state/settings';
 export type MentorSource = 'gemini' | 'demo' | 'fallback' | 'offline';
 export type AiStatus = 'live' | 'demo' | 'offline';
 
+/** Single-file build hosted without the API server: ECHO speaks from local lines only. */
+const STATIC_BUILD = import.meta.env.VITE_TARGET === 'artifact';
+
 /** Builds the compact numeric payload. Nothing identifying leaves the device. */
 export function buildDebriefPayload(result: MissionResult, lang: Lang, previous: RunSummary[]): DebriefPayload {
   let weakestType: AttackType | null = null;
@@ -51,6 +54,7 @@ export function buildDebriefPayload(result: MissionResult, lang: Lang, previous:
 
 /** Asks the server for ECHO's debrief. Always resolves — falls back to a local line. */
 export async function fetchDebrief(payload: DebriefPayload, timeoutMs = 6000): Promise<{ text: string; source: MentorSource }> {
+  if (STATIC_BUILD) return { text: demoDebrief(payload), source: 'demo' };
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -71,6 +75,7 @@ export async function fetchDebrief(payload: DebriefPayload, timeoutMs = 6000): P
 }
 
 export async function fetchAiStatus(): Promise<AiStatus> {
+  if (STATIC_BUILD) return 'demo';
   try {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 3000);

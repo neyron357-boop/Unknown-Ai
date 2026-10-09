@@ -6,14 +6,24 @@ import { VitePWA } from 'vite-plugin-pwa';
 import { fileURLToPath, URL } from 'node:url';
 
 const API_PORT = Number(process.env.PORT ?? 8787);
+/**
+ * VITE_TARGET=artifact → a self-contained single-page build (no service worker, no API server,
+ * fonts inlined, one JS bundle) that `scripts/build-artifact.mjs` folds into one HTML file.
+ */
+const ARTIFACT = process.env.VITE_TARGET === 'artifact';
 
 export default defineConfig({
+  base: ARTIFACT ? './' : '/',
   resolve: {
-    alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
+    alias: {
+      '@': fileURLToPath(new URL('./src', import.meta.url)),
+      ...(ARTIFACT ? { 'virtual:pwa-register': fileURLToPath(new URL('./src/pwa-stub.ts', import.meta.url)) } : {}),
+    },
   },
   plugins: [
     react(),
     tailwindcss(),
+    !ARTIFACT &&
     VitePWA({
       registerType: 'prompt',
       injectRegister: false,
@@ -50,18 +60,27 @@ export default defineConfig({
       '/api': { target: `http://localhost:${API_PORT}`, changeOrigin: true },
     },
   },
-  build: {
-    target: 'es2020',
-    chunkSizeWarningLimit: 1600,
-    rollupOptions: {
-      output: {
-        manualChunks(id) {
-          if (id.includes('node_modules/phaser')) return 'phaser';
-          return undefined;
+  build: ARTIFACT
+    ? {
+        target: 'es2020',
+        outDir: 'dist-artifact',
+        chunkSizeWarningLimit: 4000,
+        // Inline every asset (fonts) as data: URIs — the artifact sandbox loads nothing else.
+        assetsInlineLimit: () => true,
+        rollupOptions: { output: { inlineDynamicImports: true } },
+      }
+    : {
+        target: 'es2020',
+        chunkSizeWarningLimit: 1600,
+        rollupOptions: {
+          output: {
+            manualChunks(id) {
+              if (id.includes('node_modules/phaser')) return 'phaser';
+              return undefined;
+            },
+          },
         },
       },
-    },
-  },
   test: {
     environment: 'node',
     include: ['tests/**/*.test.ts', 'server/**/*.test.ts'],
