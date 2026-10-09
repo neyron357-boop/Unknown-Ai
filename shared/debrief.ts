@@ -1,11 +1,11 @@
 /**
  * Shared between the server and the client: the debrief payload shape and the
- * deterministic demo/fallback mentor line. Lets the game speak even when the
- * API server is unreachable (e.g. static hosting, offline PWA).
+ * deterministic demo/fallback mentor line. Lets ECHO speak even when the API
+ * server is unreachable (static hosting, offline PWA).
  */
-export type AttackTypeId = 'slashL' | 'slashR' | 'crush' | 'pierce';
-export type BestDecisionId = 'perfectAscension' | 'readStreak' | 'fastReaction' | 'recovered' | 'firstRead' | 'persistence';
-export type ErrorPatternId = 'typeWeakness' | 'impulsive' | 'latePredictor' | 'memoryGap';
+export type AttackKindId = 'mid' | 'high' | 'low';
+export type BestDecisionId = 'perfectAscension' | 'blindRead' | 'ironWill' | 'mathMind' | 'perfectStreak' | 'comboKing' | 'fastReaction' | 'persistence';
+export type ErrorPatternId = 'typeWeakness' | 'impulsive' | 'blindStruggle' | 'phantomBait' | 'mathSlip' | 'memoryGap';
 
 export interface DebriefPayload {
   kind: 'debrief';
@@ -13,26 +13,31 @@ export interface DebriefPayload {
   run: {
     mode: 'spark' | 'flow' | 'calm';
     durationSec: number;
+    grade: 'S' | 'A' | 'B' | 'C';
     accuracy: number;
     reactionMedianMs: number | null;
-    predictionsAttempted: number;
-    predictionsCorrect: number;
-    longestReadStreak: number;
-    weakPointsCorrect: number;
-    weakPointsTotal: number;
+    timingMs: number | null;
+    blindAttempted: number;
+    blindCorrect: number;
+    phantoms: number;
+    fooled: number;
+    calcCorrect: number;
+    calcTotal: number;
+    recallCorrect: number;
+    recallTotal: number;
+    maxCombo: number;
     impulsive: number;
     reboots: number;
-    assists: number;
     bestDecision: BestDecisionId;
-    weakestType: AttackTypeId | null;
+    weakestKind: AttackKindId | null;
   };
   history?: { runs: number; previousAccuracy: number | null; previousReactionMs: number | null };
   patterns: ErrorPatternId[];
 }
 
-export const TYPE_NAMES = {
-  ru: { slashL: 'разрез слева', slashR: 'разрез справа', crush: 'обвал', pierce: 'пронзание' },
-  en: { slashL: 'left slash', slashR: 'right slash', crush: 'crush', pierce: 'pierce' },
+export const KIND_NAMES = {
+  ru: { mid: 'выпад (тап)', high: 'верхний удар (вниз)', low: 'нижний удар (вверх)' },
+  en: { mid: 'thrust (tap)', high: 'high swing (down)', low: 'low sweep (up)' },
 } as const;
 
 /**
@@ -45,33 +50,31 @@ export function demoDebrief(req: DebriefPayload): string {
   const strength = (() => {
     switch (r.bestDecision) {
       case 'perfectAscension':
-        return ru ? 'Ты запомнил все слабые точки без единой ошибки.' : 'You remembered every weak point without a single mistake.';
-      case 'readStreak':
-        return ru
-          ? `Серия из ${r.longestReadStreak} прочтений подряд — ты видел раньше него.`
-          : `You saw ${r.longestReadStreak} attacks in a row before he did.`;
+        return ru ? 'Все руны — в точном порядке.' : 'Every rune, in the exact order.';
+      case 'blindRead':
+        return ru ? `Вслепую ты отбил ${r.blindCorrect} из ${r.blindAttempted}. Ритм уже в тебе.` : `Blind, you blocked ${r.blindCorrect} of ${r.blindAttempted}. The rhythm is in you.`;
+      case 'ironWill':
+        return ru ? 'Ни один фантом тебя не купил.' : 'Not one phantom fooled you.';
+      case 'mathMind':
+        return ru ? 'Ни одной ошибки в выборе энергии.' : 'Not a single wrong energy pick.';
+      case 'perfectStreak':
+        return ru ? 'Серия идеальных парирований — чистая работа.' : 'A streak of perfect parries — clean work.';
+      case 'comboKing':
+        return ru ? `Комбо ${r.maxCombo}. Ты держал бит.` : `Combo ${r.maxCombo}. You held the beat.`;
       case 'fastReaction':
-        return ru ? 'Твоя реакция была быстрее его сигнала.' : 'Your reaction outran his signal.';
-      case 'recovered':
-        return ru ? 'Ты ошибся в прогнозе — и всё равно выровнялся.' : 'Your prediction was wrong — and you still recovered.';
-      case 'firstRead':
-        return ru ? 'Ты впервые опередил его удар.' : 'You got ahead of his strike.';
+        return ru ? 'Реакция быстрее его сигнала.' : 'Your reaction outran his signal.';
       default:
         return ru ? 'Ты дошёл до конца. Это уже данные.' : 'You saw it through. That is data now.';
     }
   })();
   const tip = (() => {
-    if (req.patterns.includes('impulsive'))
-      return ru ? 'В следующий раз дай ритму прозвучать ещё раз, прежде чем рвануть.' : 'Next time, let the rhythm play once more before you commit.';
-    if (req.patterns.includes('latePredictor'))
-      return ru ? 'Попробуй двинуться в паузе — до вспышки.' : 'Try moving in the pause — before the flash.';
-    if (req.patterns.includes('memoryGap'))
-      return ru ? 'Слабые точки звучат по нотам — слушай порядок.' : 'Weak points ring in notes — listen to the order.';
-    if (r.weakestType)
-      return ru
-        ? `Следи за сигналом «${TYPE_NAMES.ru[r.weakestType]}» — он тебя ловит.`
-        : `Watch the ${TYPE_NAMES.en[r.weakestType]} signal — it catches you.`;
-    return ru ? 'Попробуй режим ПОТОК — там ритм длиннее.' : 'Try FLOW mode — the rhythm runs longer there.';
+    if (req.patterns.includes('impulsive')) return ru ? 'Не жми на замахе — дождись бита.' : 'Do not press on the windup — wait for the beat.';
+    if (req.patterns.includes('phantomBait')) return ru ? 'Перед ударом глянь вниз: без отражения — не трогай.' : 'Before you move, look down: no reflection, no touch.';
+    if (req.patterns.includes('blindStruggle')) return ru ? 'В первых кругах проговаривай порядок про себя.' : 'In the early loops, say the order to yourself.';
+    if (req.patterns.includes('mathSlip')) return ru ? 'Умножение выигрывает у большого числа не всегда — сравни оба.' : 'Multiplying does not always beat a big plus — compare both.';
+    if (req.patterns.includes('memoryGap')) return ru ? 'Руны звучат по нотам — запоминай мелодию.' : 'Runes ring as notes — remember the tune.';
+    if (r.weakestKind) return ru ? `Слабое место — ${KIND_NAMES.ru[r.weakestKind]}.` : `Weak spot: ${KIND_NAMES.en[r.weakestKind]}.`;
+    return ru ? 'Попробуй ПОТОК — серии длиннее.' : 'Try FLOW — longer sequences.';
   })();
   return `${strength} ${tip}`;
 }

@@ -56,7 +56,8 @@ export async function saveRun(run: RunSummary): Promise<void> {
 
 export async function loadRuns(): Promise<RunSummary[]> {
   const d = await db();
-  return d.getAllFromIndex('runs', 'byFinished');
+  // Runs from the first prototype used a different result shape — ignore them.
+  return (await d.getAllFromIndex('runs', 'byFinished')).filter((r) => (r.result as { version?: number }).version === 2);
 }
 
 export async function logChoice(event: Omit<ChoiceEvent, 'id'>): Promise<void> {
@@ -79,7 +80,7 @@ export async function saveCheckpoint(cp: Checkpoint): Promise<void> {
 export async function loadCheckpoint(): Promise<Checkpoint | null> {
   const d = await db();
   const cp = (await d.get('kv', CHECKPOINT_KEY)) as Checkpoint | undefined;
-  if (!cp || cp.version !== 1) return null;
+  if (!cp || cp.version !== 2) return null;
   // Stale checkpoints (older than 7 days) are discarded quietly.
   if (Date.now() - cp.savedAt > 7 * 24 * 3600 * 1000) return null;
   return cp;

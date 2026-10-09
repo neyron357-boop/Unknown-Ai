@@ -1,15 +1,15 @@
 import { audio } from '@/audio/AudioEngine';
-import { MissionDirector, type Checkpoint, type DirectorEvent } from '@/game/core/director';
+import { DuelDirector, type Checkpoint, type DirectorEvent } from '@/game/core/director';
 import type { MissionResult } from '@/game/core/metrics';
-import type { Action, ModeId } from '@/game/core/types';
+import type { Action, ModeId, UpgradeId } from '@/game/core/types';
 import { GestureRecognizer } from '@/game/input/GestureRecognizer';
+import { useHud } from '@/state/hud';
 import { bindAudio } from './bindAudio';
 import { bindHud } from './bindHud';
-import { useHud } from '@/state/hud';
 
 export interface SessionOptions {
   mode: ModeId;
-  telegraphScale: number;
+  ease: number;
   hints: boolean;
   resume?: Checkpoint | null;
   onCheckpoint?: (cp: Checkpoint) => void;
@@ -17,47 +17,42 @@ export interface SessionOptions {
 }
 
 /**
- * MissionSession glues the pure MissionDirector to the outside world:
- * HUD store, audio, input, pause/resume and persistence callbacks.
- * The Phaser scene drives `tick()` from its update loop and renders events.
+ * Glue between the pure DuelDirector and the outside world: HUD store, audio
+ * conductor, touch input (with touch-down timestamps), pause and persistence.
+ * The Phaser scene drives `tick()` from its update loop.
  */
 export class MissionSession {
-  readonly director: MissionDirector;
+  readonly director: DuelDirector;
   readonly gestures: GestureRecognizer;
   readonly startedAt = Date.now();
   private paused = false;
-  private lastTickWall = performance.now();
+  private lastTickPerf = performance.now();
   private readonly unbind: (() => void)[] = [];
   /** Debug-only speed multiplier (?speed=4) for automated play-throughs. */
   private readonly speed: number;
-  /** Scene hook for positional taps during Ascension (screen px → node index). */
+  /** Scene hooks: rune under a tap (css px), orb side under a tap. */
   tapResolver: ((x: number, y: number) => number | null) | null = null;
-  /** Renderer hook so visuals (tweens, timers) freeze together with the rules. */
+  sideResolver: ((x: number) => 'left' | 'right') | null = null;
+  /** Renderer hook so visuals freeze together with the rules. */
   onPauseChange: ((paused: boolean) => void) | null = null;
 
   constructor(private readonly opts: SessionOptions) {
-    this.director = new MissionDirector({
-      mode: opts.mode,
-      telegraphScale: opts.telegraphScale,
-      hints: opts.hints,
-      resume: opts.resume ?? undefined,
-    });
+    this.director = new DuelDirector({ mode: opts.mode, ease: opts.ease, hints: opts.hints, resume: opts.resume ?? undefined });
     this.speed = readDebugSpeed();
-    // Dev-only automation hook (used by the Playwright play-through script).
     if (import.meta.env.DEV) (window as unknown as { __UNKNOWN_SESSION__?: MissionSession }).__UNKNOWN_SESSION__ = this;
     this.gestures = new GestureRecognizer({
-      onAction: (a) => this.input(a),
-      onTap: (x, y) => this.tap(x, y),
+      onAction: (a, t, x) => this.input(a, t, x),
+      onTap: (x, y, t) => this.tap(x, y, t),
     });
     this.unbind.push(bindHud(this.director), bindAudio(this.director));
     this.unbind.push(
       this.director.on((e) => {
-        if (e.type === 'stage' && (e.loop === 'pattern' || e.loop === 'overdrive')) {
+        if (e.type === 'round') {
           const cp = this.director.getCheckpoint();
           if (cp) opts.onCheckpoint?.(cp);
         }
-        if (e.type === 'ascendRecall') this.gestures.mode = 'taps';
-        if (e.type === 'ascendStrike' || e.type === 'complete') this.gestures.mode = 'actions';
+        if (e.type === 'recall') this.gestures.mode = 'taps';
+        if (e.type === 'finisher' || e.type === 'complete') this.gestures.mode = 'actions';
         if (e.type === 'complete') opts.onComplete?.(e.result);
       }),
     );
@@ -74,27 +69,40 @@ export class MissionSession {
   }
 
   start(): void {
-    this.lastTickWall = performance.now();
+    audio.attachConductor();
+    this.lastTickPerf = performance.now();
     this.director.start();
   }
 
   tick(dtMs: number): void {
-    this.lastTickWall = performance.now();
     if (this.paused) return;
-    // Clamp huge frame gaps (e.g. after a hitch) so timing stays fair.
+    // Clamp frame gaps so a hitch never steals a timing window.
     this.director.update(Math.min(dtMs, 100) * this.speed);
-    this.gestures.tick(performance.now());
+    this.lastTickPerf = performance.now();
+    this.gestures.tick(this.lastTickPerf);
+    audio.pump(this.director.getNow());
   }
 
-  input(action: Action): void {
+  /** Converts a performance.now() timestamp into director time. */
+  private toDirector(tPerf: number): number {
+    return this.director.getNow() + (tPerf - this.lastTickPerf) * this.speed;
+  }
+
+  input(action: Action, tPerf = performance.now(), x?: number): void {
     if (this.paused) return;
-    this.director.input(action, performance.now() - this.lastTickWall);
+    let a = action;
+    // During the energy choice a tap picks the side it landed on.
+    if (a === 'tap' && x !== undefined && this.director.isOrbActive() && this.sideResolver) a = this.sideResolver(x);
+    this.director.input(a, this.toDirector(tPerf));
   }
 
-  tap(x: number, y: number): void {
+  tap(x: number, y: number, tPerf = performance.now()): void {
     if (this.paused || !this.tapResolver) return;
-    const node = this.tapResolver(x, y);
-    this.director.tapNode(node, performance.now() - this.lastTickWall);
+    this.director.tapNode(this.tapResolver(x, y), this.toDirector(tPerf));
+  }
+
+  chooseUpgrade(id: UpgradeId): void {
+    this.director.chooseUpgrade(id);
   }
 
   isPaused(): boolean {
@@ -114,7 +122,7 @@ export class MissionSession {
   resume(): void {
     if (!this.paused) return;
     this.paused = false;
-    this.lastTickWall = performance.now();
+    this.lastTickPerf = performance.now();
     useHud.setState({ paused: false });
     this.onPauseChange?.(false);
     audio.unlock();
@@ -125,6 +133,7 @@ export class MissionSession {
     for (const off of this.unbind) off();
     this.unbind.length = 0;
     this.gestures.reset();
+    audio.detachConductor();
   }
 }
 

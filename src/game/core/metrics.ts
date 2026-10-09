@@ -1,11 +1,25 @@
-import { isSuccess, type AscensionRecord, type AttackRecord, type AttackType, type ModeId, type TutorialRecord } from './types';
+import {
+  isSuccess,
+  type AttackKind,
+  type AttackRecord,
+  type ModeId,
+  type OrbRecord,
+  type RecallRecord,
+  type RoundKind,
+  type StrikeRecord,
+  type UpgradeId,
+} from './types';
+
+export type Grade = 'S' | 'A' | 'B' | 'C';
 
 export type BestDecisionKind =
   | 'perfectAscension'
-  | 'readStreak'
+  | 'blindRead'
+  | 'ironWill'
+  | 'mathMind'
+  | 'perfectStreak'
+  | 'comboKing'
   | 'fastReaction'
-  | 'recovered'
-  | 'firstRead'
   | 'persistence';
 
 export interface Tally {
@@ -14,39 +28,56 @@ export interface Tally {
 }
 
 export interface MissionResult {
+  version: 2;
   mode: ModeId;
   seed: number;
   durationMs: number;
+  score: number;
+  grade: Grade;
+  /** 0..1 — the transparent rating behind the grade. */
+  rating: number;
+  /** Correct outcomes / all attacks (phantoms included). */
+  accuracy: number;
   attacks: number;
   successes: number;
-  /** 0..1 */
-  accuracy: number;
+  perfects: number;
+  maxCombo: number;
+  /** Mean |input − beat| for correct responses, ms. */
+  timingMs: number | null;
+  /** Median time from the attack becoming visible to the correct response, ms. */
   reactionMedianMs: number | null;
   reactionBestMs: number | null;
+  /** Attacks played blind (from memory of the pattern). */
   predictions: { attempts: number; correct: number };
-  reads: number;
-  longestReadStreak: number;
-  ascension: { taps: number; correct: number };
-  /** Wrong first commitments: wrong predictions + wrong reactions. */
+  inhibition: { phantoms: number; ignored: number; fooled: number };
+  calc: { choices: number; correct: number; decisionMedianMs: number | null };
+  recall: { taps: number; correct: number };
+  strikes: { total: number; onBeat: number };
+  /** Inputs made out of impatience: during a windup or at a phantom. */
   impulsive: number;
+  hitsTaken: number;
   reboots: number;
-  assists: number;
-  byType: Record<AttackType, Tally>;
-  byStage: { contact: Tally; pattern: Tally; ascension: Tally };
+  byRound: Record<RoundKind, Tally>;
+  byKind: Record<AttackKind, Tally>;
+  upgrades: UpgradeId[];
   bestDecision: { kind: BestDecisionKind; value: number };
-  tutorialMedianMs: number | null;
-  records: { attacks: AttackRecord[]; ascensions: AscensionRecord[]; tutorial: TutorialRecord[] };
+  records: { attacks: AttackRecord[]; strikes: StrikeRecord[]; orbs: OrbRecord[]; recall: RecallRecord | null };
 }
 
 export interface SummarizeInput {
   mode: ModeId;
   seed: number;
   durationMs: number;
+  score: number;
+  maxCombo: number;
   attacks: AttackRecord[];
-  ascensions: AscensionRecord[];
-  tutorial: TutorialRecord[];
+  strikes: StrikeRecord[];
+  orbs: OrbRecord[];
+  recall: RecallRecord | null;
   reboots: number;
-  assists: number;
+  hitsTaken: number;
+  stray: number;
+  upgrades: UpgradeId[];
 }
 
 export function median(values: number[]): number | null {
@@ -66,79 +97,94 @@ export function longestStreak<T>(items: T[], pred: (t: T) => boolean): number {
   return best;
 }
 
-const emptyTally = (): Tally => ({ n: 0, ok: 0 });
+const tally = (): Tally => ({ n: 0, ok: 0 });
 
-export function summarizeMission(input: SummarizeInput): MissionResult {
-  const { attacks, ascensions, tutorial } = input;
-  const successes = attacks.filter((a) => isSuccess(a.outcome)).length;
-  const reactions = attacks
-    .filter((a) => (a.outcome === 'react' || a.outcome === 'recovered') && a.reactionMs !== null)
-    .map((a) => a.reactionMs as number);
-  const predicted = attacks.filter((a) => a.predicted !== null);
-  const predictionsCorrect = predicted.filter((a) => a.predictedCorrect).length;
-  const reads = attacks.filter((a) => a.outcome === 'read').length;
-  const recovered = attacks.filter((a) => a.outcome === 'recovered').length;
-  const impulsive = attacks.filter((a) => a.predictedCorrect === false || a.outcome === 'wrong').length;
-  const longestReadStreak = longestStreak(attacks, (a) => a.outcome === 'read');
+export function gradeFor(rating: number): Grade {
+  return rating >= 0.88 ? 'S' : rating >= 0.72 ? 'A' : rating >= 0.52 ? 'B' : 'C';
+}
 
-  const byType: Record<AttackType, Tally> = {
-    slashL: emptyTally(),
-    slashR: emptyTally(),
-    crush: emptyTally(),
-    pierce: emptyTally(),
-  };
-  const byStage = { contact: emptyTally(), pattern: emptyTally(), ascension: emptyTally() };
+export function summarizeRun(input: SummarizeInput): MissionResult {
+  const { attacks, strikes, orbs, recall } = input;
+  const successes = attacks.filter((a) => isSuccess(a.judgement));
+  const perfects = attacks.filter((a) => a.judgement === 'perfect').length;
+  const responded = attacks.filter((a) => (a.judgement === 'perfect' || a.judgement === 'good') && a.offsetMs !== null);
+  const reactions = attacks.filter((a) => a.reactionMs !== null && a.reactionMs > 0).map((a) => a.reactionMs as number);
+  const blind = attacks.filter((a) => a.reveal === 'blind' && !a.phantom);
+  const phantoms = attacks.filter((a) => a.phantom);
+  const fooled = phantoms.filter((a) => a.judgement === 'fooled').length;
+
+  const byRound: Record<RoundKind, Tally> = { takt: tally(), phantoms: tally(), overcharge: tally(), ascension: tally() };
+  const byKind: Record<AttackKind, Tally> = { mid: tally(), high: tally(), low: tally() };
   for (const a of attacks) {
-    const ok = isSuccess(a.outcome) ? 1 : 0;
-    byType[a.type].n++;
-    byType[a.type].ok += ok;
-    const key = a.stage === 'contact' ? 'contact' : a.stage === 'pattern' ? 'pattern' : 'ascension';
-    byStage[key].n++;
-    byStage[key].ok += ok;
+    const ok = isSuccess(a.judgement) ? 1 : 0;
+    byRound[a.round].n++;
+    byRound[a.round].ok += ok;
+    if (!a.phantom) {
+      byKind[a.kind].n++;
+      byKind[a.kind].ok += ok;
+    }
   }
-
-  const taps = ascensions.flatMap((a) => a.taps);
+  const orbCorrect = orbs.filter((o) => o.correct).length;
+  const taps = recall?.taps ?? [];
   const tapsCorrect = taps.filter((t) => t.correct).length;
-  const reactionBestMs = reactions.length ? Math.min(...reactions) : null;
+  const onBeat = strikes.filter((s) => s.onBeat).length;
 
-  return {
+  // Transparent rating: weighted share of everything the run asked for.
+  const attackScore = attacks.length
+    ? attacks.reduce((s, a) => s + (a.judgement === 'perfect' || a.judgement === 'ignored' ? 1 : a.judgement === 'good' ? 0.75 : 0), 0) / attacks.length
+    : 0;
+  const parts: [number, number][] = [
+    [attackScore, 0.55],
+    [strikes.length ? onBeat / Math.max(strikes.length, 1) : 0, 0.1],
+    [orbs.length ? orbCorrect / orbs.length : 0, 0.15],
+    [taps.length ? tapsCorrect / taps.length : 0, 0.2],
+  ];
+  const rating = parts.reduce((s, [v, w]) => s + v * w, 0) / parts.reduce((s, [, w]) => s + w, 0);
+
+  const timing = responded.map((a) => Math.abs(a.offsetMs as number));
+  const perfectStreak = longestStreak(attacks, (a) => a.judgement === 'perfect');
+  const result: MissionResult = {
+    version: 2,
     mode: input.mode,
     seed: input.seed,
     durationMs: input.durationMs,
+    score: input.score,
+    grade: gradeFor(rating),
+    rating: Math.round(rating * 1000) / 1000,
+    accuracy: attacks.length ? successes.length / attacks.length : 0,
     attacks: attacks.length,
-    successes,
-    accuracy: attacks.length ? successes / attacks.length : 0,
+    successes: successes.length,
+    perfects,
+    maxCombo: input.maxCombo,
+    timingMs: timing.length ? Math.round(timing.reduce((a, b) => a + b, 0) / timing.length) : null,
     reactionMedianMs: median(reactions),
-    reactionBestMs,
-    predictions: { attempts: predicted.length, correct: predictionsCorrect },
-    reads,
-    longestReadStreak,
-    ascension: { taps: taps.length, correct: tapsCorrect },
-    impulsive,
+    reactionBestMs: reactions.length ? Math.min(...reactions) : null,
+    predictions: { attempts: blind.length, correct: blind.filter((a) => isSuccess(a.judgement)).length },
+    inhibition: { phantoms: phantoms.length, ignored: phantoms.length - fooled, fooled },
+    calc: { choices: orbs.length, correct: orbCorrect, decisionMedianMs: median(orbs.filter((o) => o.decisionMs !== null).map((o) => o.decisionMs as number)) },
+    recall: { taps: taps.length, correct: tapsCorrect },
+    strikes: { total: strikes.length, onBeat },
+    impulsive: input.stray + fooled,
+    hitsTaken: input.hitsTaken,
     reboots: input.reboots,
-    assists: input.assists,
-    byType,
-    byStage,
-    bestDecision: pickBestDecision({ ascensions, longestReadStreak, reactionBestMs, recovered, reads, attacks: attacks.length }),
-    tutorialMedianMs: median(tutorial.filter((t) => t.ms !== null).map((t) => t.ms as number)),
-    records: { attacks, ascensions, tutorial },
+    byRound,
+    byKind,
+    upgrades: [...input.upgrades],
+    bestDecision: { kind: 'persistence', value: attacks.length },
+    records: { attacks, strikes, orbs, recall },
   };
+  result.bestDecision = pickBestDecision(result, perfectStreak);
+  return result;
 }
 
-/** Deterministic, explainable "best decision" highlight. */
-export function pickBestDecision(p: {
-  ascensions: AscensionRecord[];
-  longestReadStreak: number;
-  reactionBestMs: number | null;
-  recovered: number;
-  reads: number;
-  attacks: number;
-}): MissionResult['bestDecision'] {
-  const perfect = p.ascensions.filter((a) => a.taps.length > 0 && a.taps.every((t) => t.correct));
-  if (perfect.length) return { kind: 'perfectAscension', value: Math.max(...perfect.map((a) => a.taps.length)) };
-  if (p.longestReadStreak >= 3) return { kind: 'readStreak', value: p.longestReadStreak };
-  if (p.reactionBestMs !== null && p.reactionBestMs <= 450) return { kind: 'fastReaction', value: p.reactionBestMs };
-  if (p.recovered > 0) return { kind: 'recovered', value: p.recovered };
-  if (p.reads > 0) return { kind: 'firstRead', value: p.reads };
-  return { kind: 'persistence', value: p.attacks };
+/** Deterministic, explainable highlight of the run. */
+export function pickBestDecision(r: MissionResult, perfectStreak: number): MissionResult['bestDecision'] {
+  if (r.recall.taps > 0 && r.recall.correct === r.recall.taps) return { kind: 'perfectAscension', value: r.recall.taps };
+  if (r.predictions.attempts >= 4 && r.predictions.correct === r.predictions.attempts) return { kind: 'blindRead', value: r.predictions.correct };
+  if (r.inhibition.phantoms >= 4 && r.inhibition.fooled === 0) return { kind: 'ironWill', value: r.inhibition.phantoms };
+  if (r.calc.choices >= 4 && r.calc.correct === r.calc.choices) return { kind: 'mathMind', value: r.calc.correct };
+  if (perfectStreak >= 5) return { kind: 'perfectStreak', value: perfectStreak };
+  if (r.maxCombo >= 15) return { kind: 'comboKing', value: r.maxCombo };
+  if (r.reactionBestMs !== null && r.reactionBestMs <= 380) return { kind: 'fastReaction', value: r.reactionBestMs };
+  return { kind: 'persistence', value: r.attacks };
 }

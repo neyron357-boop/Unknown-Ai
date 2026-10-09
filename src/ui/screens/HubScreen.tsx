@@ -32,8 +32,9 @@ export function HubScreen() {
   };
 
   const canResume = checkpoint && checkpoint.mode === mode;
-  const resumeStage = checkpoint?.resumeAt === 'overdrive' ? 4 : 3;
-  const best = runs.reduce((m, r) => Math.max(m, r.result.accuracy), 0);
+  const resumeStage = (checkpoint?.round ?? 0) + 1;
+  const order = ['C', 'B', 'A', 'S'];
+  const bestGrade = runs.reduce<string | null>((m, r) => (!m || order.indexOf(r.result.grade) > order.indexOf(m) ? r.result.grade : m), null);
 
   return (
     <div className="app-height relative flex flex-col overflow-hidden">
@@ -60,7 +61,11 @@ export function HubScreen() {
         </h1>
         <div className="anim-rise mt-2 text-[12px] tracking-[0.2em] text-mist" style={{ animationDelay: '0.2s' }}>
           {t('hub.duration')}
-          {runs.length > 0 && <span className="ml-3 text-bone/60">· {Math.round(best * 100)}%</span>}
+          {bestGrade && (
+            <span className="ml-3 text-bone/60">
+              · {t('hub.best')} <span className="font-display text-bone">{bestGrade}</span>
+            </span>
+          )}
         </div>
       </main>
 

@@ -17,30 +17,30 @@ export interface RunSummary {
   modeChosen: boolean;
   startedAt: number;
   finishedAt: number;
-  telegraphScale: number;
+  /** Difficulty factor used for this run (>1 easier). */
+  ease: number;
   result: MissionResult;
 }
 
 export type AdaptationReason = 'baseline' | 'struggling' | 'mastered' | 'steady';
 
 export interface Adaptation {
-  /** Multiplier for telegraph durations of the next run (1 = default). */
-  telegraphScale: number;
+  /** >1 slower tempo and wider timing windows, <1 faster/tighter. */
+  ease: number;
   reason: AdaptationReason;
-  /** Number of recent runs the rule looked at. */
   basedOn: number;
 }
 
-export const SCALE_MIN = 0.85;
-export const SCALE_MAX = 1.25;
+export const EASE_MIN = 0.85;
+export const EASE_MAX = 1.25;
 const STEP = 0.05;
 
 /**
  * Rule (per mode, last 3 runs):
- *  - fewer than 2 runs → baseline (1.0)
- *  - loop-stage accuracy < 60% or ≥1 reboot per run → +0.05 (more time to read)
- *  - accuracy ≥ 90% and median reaction ≤ 420ms and no assists → −0.05 (tighter)
- *  - otherwise keep the last scale.
+ *  - fewer than 2 runs → baseline
+ *  - mean rating < 0.55 or ≥ 1 reboot per run → +0.05 (slower, wider windows)
+ *  - mean rating ≥ 0.88 and no reboots → −0.05 (faster, tighter)
+ *  - otherwise keep the last value.
  * One step per run, clamped to [0.85, 1.25], so difficulty never jumps.
  */
 export function computeAdaptation(history: RunSummary[], mode: ModeId): Adaptation {
@@ -48,106 +48,96 @@ export function computeAdaptation(history: RunSummary[], mode: ModeId): Adaptati
     .filter((r) => r.mode === mode)
     .sort((a, b) => b.finishedAt - a.finishedAt)
     .slice(0, 3);
-  const last = runs[0]?.telegraphScale ?? 1;
-  if (runs.length < 2) return { telegraphScale: round2(last), reason: 'baseline', basedOn: runs.length };
-
-  const loopTotals = runs.reduce(
-    (acc, r) => {
-      acc.n += r.result.byStage.pattern.n + r.result.byStage.ascension.n;
-      acc.ok += r.result.byStage.pattern.ok + r.result.byStage.ascension.ok;
-      return acc;
-    },
-    { n: 0, ok: 0 },
-  );
-  const accuracy = loopTotals.n ? loopTotals.ok / loopTotals.n : 0;
+  const last = runs[0]?.ease ?? 1;
+  if (runs.length < 2) return { ease: round2(last), reason: 'baseline', basedOn: runs.length };
+  const rating = runs.reduce((s, r) => s + r.result.rating, 0) / runs.length;
   const reboots = runs.reduce((s, r) => s + r.result.reboots, 0) / runs.length;
-  const assists = runs.reduce((s, r) => s + r.result.assists, 0);
-  const reactions = runs.map((r) => r.result.reactionMedianMs).filter((v): v is number => v !== null);
-  const reaction = reactions.length ? reactions.reduce((a, b) => a + b, 0) / reactions.length : Infinity;
-
-  if (accuracy < 0.6 || reboots >= 1) {
-    return { telegraphScale: clampScale(last + STEP), reason: 'struggling', basedOn: runs.length };
-  }
-  if (accuracy >= 0.9 && reaction <= 420 && assists === 0) {
-    return { telegraphScale: clampScale(last - STEP), reason: 'mastered', basedOn: runs.length };
-  }
-  return { telegraphScale: round2(last), reason: 'steady', basedOn: runs.length };
+  if (rating < 0.55 || reboots >= 1) return { ease: clamp(last + STEP), reason: 'struggling', basedOn: runs.length };
+  if (rating >= 0.88 && reboots === 0) return { ease: clamp(last - STEP), reason: 'mastered', basedOn: runs.length };
+  return { ease: round2(last), reason: 'steady', basedOn: runs.length };
 }
 
-function clampScale(v: number): number {
-  return round2(Math.max(SCALE_MIN, Math.min(SCALE_MAX, v)));
-}
-
-function round2(v: number): number {
-  return Math.round(v * 100) / 100;
-}
+const clamp = (v: number) => round2(Math.max(EASE_MIN, Math.min(EASE_MAX, v)));
+const round2 = (v: number) => Math.round(v * 100) / 100;
 
 export interface ProfileStats {
   runs: number;
   totalMinutes: number;
+  bestGrade: MissionResult['grade'] | null;
   bestAccuracy: number;
   bestReactionMs: number | null;
-  totalReads: number;
-  /** Runs per mode that the player picked explicitly. */
+  /** Correct share of blind (from-memory) attacks across runs. */
+  blindPrecision: number | null;
+  /** Share of phantoms correctly let through. */
+  inhibition: number | null;
+  calcAccuracy: number | null;
+  recallAccuracy: number | null;
   chosenModes: Record<ModeId, number>;
-  /** Fraction of predictions that were right, across all runs. */
-  predictionPrecision: number | null;
-  /** Chronological series for sparklines. */
   accuracySeries: number[];
   reactionSeries: number[];
-  /** Mastered = at least one run in that mode with ≥ 90% accuracy and no assist. */
   masteredModes: ModeId[];
 }
+
+const GRADE_ORDER = ['C', 'B', 'A', 'S'] as const;
 
 export function computeProfileStats(history: RunSummary[]): ProfileStats {
   const runs = [...history].sort((a, b) => a.finishedAt - b.finishedAt);
   const chosenModes: Record<ModeId, number> = { spark: 0, flow: 0, calm: 0 };
-  let predAttempts = 0;
-  let predCorrect = 0;
+  const sum = { blindN: 0, blindOk: 0, ph: 0, phOk: 0, calcN: 0, calcOk: 0, recN: 0, recOk: 0 };
   const mastered = new Set<ModeId>();
+  let best: MissionResult['grade'] | null = null;
   for (const r of runs) {
+    const x = r.result;
     if (r.modeChosen) chosenModes[r.mode]++;
-    predAttempts += r.result.predictions.attempts;
-    predCorrect += r.result.predictions.correct;
-    if (r.result.accuracy >= 0.9 && r.result.assists === 0) mastered.add(r.mode);
+    sum.blindN += x.predictions.attempts;
+    sum.blindOk += x.predictions.correct;
+    sum.ph += x.inhibition.phantoms;
+    sum.phOk += x.inhibition.ignored;
+    sum.calcN += x.calc.choices;
+    sum.calcOk += x.calc.correct;
+    sum.recN += x.recall.taps;
+    sum.recOk += x.recall.correct;
+    if (x.grade === 'S' || x.grade === 'A') mastered.add(r.mode);
+    if (!best || GRADE_ORDER.indexOf(x.grade) > GRADE_ORDER.indexOf(best)) best = x.grade;
   }
+  const ratio = (ok: number, n: number) => (n ? ok / n : null);
   const reactions = runs.map((r) => r.result.reactionMedianMs).filter((v): v is number => v !== null);
   return {
     runs: runs.length,
     totalMinutes: Math.round(runs.reduce((s, r) => s + r.result.durationMs, 0) / 6000) / 10,
+    bestGrade: best,
     bestAccuracy: runs.reduce((m, r) => Math.max(m, r.result.accuracy), 0),
     bestReactionMs: reactions.length ? Math.min(...reactions) : null,
-    totalReads: runs.reduce((s, r) => s + r.result.reads, 0),
+    blindPrecision: ratio(sum.blindOk, sum.blindN),
+    inhibition: ratio(sum.phOk, sum.ph),
+    calcAccuracy: ratio(sum.calcOk, sum.calcN),
+    recallAccuracy: ratio(sum.recOk, sum.recN),
     chosenModes,
-    predictionPrecision: predAttempts ? predCorrect / predAttempts : null,
     accuracySeries: runs.map((r) => r.result.accuracy),
     reactionSeries: reactions,
     masteredModes: [...mastered],
   };
 }
 
-/**
- * Detects repeated error patterns from the last run — the facts an AI mentor
- * may comment on. Computed locally and deterministically.
- */
+export type ErrorPatternKind = 'typeWeakness' | 'impulsive' | 'blindStruggle' | 'phantomBait' | 'mathSlip' | 'memoryGap';
+
 export interface ErrorPattern {
-  kind: 'typeWeakness' | 'impulsive' | 'latePredictor' | 'memoryGap';
+  kind: ErrorPatternKind;
   detail: string;
   count: number;
 }
 
-export function detectErrorPatterns(result: MissionResult): ErrorPattern[] {
+/** Repeated error patterns of a run — the facts an AI mentor may comment on. */
+export function detectErrorPatterns(r: MissionResult): ErrorPattern[] {
   const out: ErrorPattern[] = [];
-  for (const [type, t] of Object.entries(result.byType)) {
+  for (const [kind, t] of Object.entries(r.byKind)) {
     const miss = t.n - t.ok;
-    if (t.n >= 3 && miss >= 2 && miss / t.n >= 0.4) out.push({ kind: 'typeWeakness', detail: type, count: miss });
+    if (t.n >= 3 && miss >= 2 && miss / t.n >= 0.35) out.push({ kind: 'typeWeakness', detail: kind, count: miss });
   }
-  if (result.impulsive >= 3) out.push({ kind: 'impulsive', detail: 'early-wrong-commit', count: result.impulsive });
-  const loopAttacks = result.byStage.pattern.n + result.byStage.ascension.n;
-  if (loopAttacks >= 8 && result.predictions.attempts === 0) {
-    out.push({ kind: 'latePredictor', detail: 'no-predictions', count: loopAttacks });
-  }
-  const missedTaps = result.ascension.taps - result.ascension.correct;
-  if (missedTaps >= 2) out.push({ kind: 'memoryGap', detail: 'weak-points', count: missedTaps });
+  if (r.impulsive >= 3) out.push({ kind: 'impulsive', detail: 'early-input', count: r.impulsive });
+  if (r.predictions.attempts >= 4 && r.predictions.correct / r.predictions.attempts < 0.6) out.push({ kind: 'blindStruggle', detail: 'blind-loop', count: r.predictions.attempts - r.predictions.correct });
+  if (r.inhibition.fooled >= 2) out.push({ kind: 'phantomBait', detail: 'phantoms', count: r.inhibition.fooled });
+  if (r.calc.choices - r.calc.correct >= 2) out.push({ kind: 'mathSlip', detail: 'orbs', count: r.calc.choices - r.calc.correct });
+  if (r.recall.taps - r.recall.correct >= 1) out.push({ kind: 'memoryGap', detail: 'runes', count: r.recall.taps - r.recall.correct });
   return out;
 }

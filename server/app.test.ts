@@ -11,19 +11,24 @@ const validBody = {
   lang: 'ru',
   run: {
     mode: 'spark',
-    durationSec: 200,
+    durationSec: 140,
+    grade: 'A',
     accuracy: 0.82,
     reactionMedianMs: 410,
-    predictionsAttempted: 6,
-    predictionsCorrect: 5,
-    longestReadStreak: 3,
-    weakPointsCorrect: 5,
-    weakPointsTotal: 6,
+    timingMs: 48,
+    blindAttempted: 8,
+    blindCorrect: 8,
+    phantoms: 7,
+    fooled: 1,
+    calcCorrect: 5,
+    calcTotal: 6,
+    recallCorrect: 2,
+    recallTotal: 3,
+    maxCombo: 21,
     impulsive: 1,
     reboots: 0,
-    assists: 0,
-    bestDecision: 'readStreak',
-    weakestType: 'crush',
+    bestDecision: 'blindRead',
+    weakestKind: 'high',
   },
   patterns: [],
 };
@@ -38,8 +43,8 @@ describe('AI service', () => {
     const res = await request(app).post('/api/ai/mentor').send(validBody);
     expect(res.status).toBe(200);
     expect(res.body.source).toBe('demo');
-    expect(res.body.text).toMatch(/подряд/);
-    expect(res.body.text).toMatch(/следи|Следи/);
+    expect(res.body.text).toMatch(/Вслепую/);
+    expect(res.body.text).toMatch(/верхний удар/);
   });
 
   it('rejects invalid payloads (no free text reaches the model)', async () => {
@@ -66,6 +71,7 @@ describe('AI service', () => {
     expect(res.body).toEqual({ text: 'Ты видел его ритм. Держи паузу.', source: 'gemini' });
     const call = (model.generate as ReturnType<typeof vi.fn>).mock.calls[0][0];
     expect(call.prompt).toContain('accuracy_pct=82');
+    expect(call.prompt).toContain('blind_blocks=8/8');
     expect(call.system).toContain('ЭХО');
   });
 

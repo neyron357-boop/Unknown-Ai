@@ -1,17 +1,18 @@
 import { useState } from 'react';
 import { computeAdaptation, computeProfileStats } from '@/cognitive/adaptation';
-import type { AttackType } from '@/game/core/types';
+import type { AttackKind } from '@/game/core/types';
 import { useT, type StringKey } from '@/i18n/strings';
 import { useApp } from '@/state/app';
 import { useSettings } from '@/state/settings';
 import { RatioBar, Sparkline, StatTile } from '../charts';
 import { GhostButton, ScreenHeader, SectionTitle } from '../primitives';
 
-const TYPES: AttackType[] = ['slashL', 'slashR', 'crush', 'pierce'];
+const KINDS: AttackKind[] = ['mid', 'high', 'low'];
+const pct = (v: number | null) => (v === null ? '—' : `${Math.round(v * 100)}%`);
 
 export function StatsScreen() {
   const t = useT();
-  const { runs, lastRun, go, back, wipe } = useApp();
+  const { runs, lastRun, go, back, wipe, checkpoint } = useApp();
   const mode = useSettings((s) => s.mode);
   const [confirm, setConfirm] = useState(false);
   const [wiped, setWiped] = useState(false);
@@ -28,16 +29,18 @@ export function StatsScreen() {
           <p className="mt-16 text-center text-[14px] text-mist">{wiped ? t('stats.wiped') : t('stats.empty')}</p>
         ) : (
           <>
-            <div className="mt-2 grid grid-cols-2 gap-2">
+            <div className="mt-2 grid grid-cols-3 gap-2">
               <StatTile label={t('stats.runs')} value={String(stats.runs)} />
               <StatTile label={t('stats.minutes')} value={String(stats.totalMinutes)} />
-              <StatTile label={t('stats.bestAcc')} value={`${Math.round(stats.bestAccuracy * 100)}%`} />
+              <StatTile label={t('stats.bestGrade')} value={stats.bestGrade ?? '—'} />
+            </div>
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              <StatTile label={t('stats.bestAcc')} value={pct(stats.bestAccuracy)} />
               <StatTile label={t('stats.bestReact')} value={stats.bestReactionMs !== null ? `${stats.bestReactionMs} ${t('res.ms')}` : '—'} />
-              <StatTile
-                label={t('stats.precision')}
-                value={stats.predictionPrecision !== null ? `${Math.round(stats.predictionPrecision * 100)}%` : '—'}
-              />
-              <StatTile label={t('stats.reads')} value={String(stats.totalReads)} />
+              <StatTile label={t('stats.precision')} value={pct(stats.blindPrecision)} />
+              <StatTile label={t('stats.inhibition')} value={pct(stats.inhibition)} />
+              <StatTile label={t('stats.calc')} value={pct(stats.calcAccuracy)} />
+              <StatTile label={t('stats.recall')} value={pct(stats.recallAccuracy)} />
             </div>
 
             {stats.accuracySeries.length >= 2 && (
@@ -50,32 +53,32 @@ export function StatsScreen() {
             )}
 
             <SectionTitle>{t('stats.adapt')}</SectionTitle>
-            <div className="flex items-baseline justify-between border border-white/[0.07] bg-white/[0.02] px-3.5 py-3">
+            <div className="flex items-baseline justify-between gap-3 border border-white/[0.07] bg-white/[0.02] px-3.5 py-3">
               <span className="text-[13px] text-bone/85">{t(`stats.adapt.${adaptation.reason}` as StringKey)}</span>
-              <span className="text-[13px] font-semibold text-bone">
-                {t(`mode.${mode}` as StringKey)} · ×{adaptation.telegraphScale.toFixed(2)}
+              <span className="shrink-0 text-[13px] font-semibold text-bone">
+                {t(`mode.${mode}` as StringKey)} · ×{adaptation.ease.toFixed(2)}
               </span>
             </div>
 
             {r && (
               <>
-                <SectionTitle>{t('stats.lastRun')} · {t('stats.byStage')}</SectionTitle>
-                <RatioBar label={t('stage.contact')} ok={r.byStage.contact.ok} n={r.byStage.contact.n} />
-                <RatioBar label={t('stage.pattern')} ok={r.byStage.pattern.ok} n={r.byStage.pattern.n} />
-                <RatioBar label={t('stage.ascension')} ok={r.byStage.ascension.ok} n={r.byStage.ascension.n} />
+                <SectionTitle>
+                  {t('stats.lastRun')} · {t('stats.byRound')}
+                </SectionTitle>
+                <RatioBar label={t('round.takt')} ok={r.byRound.takt.ok} n={r.byRound.takt.n} />
+                <RatioBar label={t('round.phantoms')} ok={r.byRound.phantoms.ok} n={r.byRound.phantoms.n} />
+                <RatioBar label={t('round.overcharge')} ok={r.calc.correct} n={r.calc.choices} />
+                <RatioBar label={t('round.ascension')} ok={r.recall.correct + r.byRound.ascension.ok} n={r.recall.taps + r.byRound.ascension.n} />
 
-                <SectionTitle>{t('stats.byType')}</SectionTitle>
-                {TYPES.filter((k) => r.byType[k].n > 0).map((k) => (
-                  <RatioBar key={k} label={t(`type.${k}` as StringKey)} ok={r.byType[k].ok} n={r.byType[k].n} />
+                <SectionTitle>{t('stats.byKind')}</SectionTitle>
+                {KINDS.filter((k) => r.byKind[k].n > 0).map((k) => (
+                  <RatioBar key={k} label={t(`kind.${k}` as StringKey)} ok={r.byKind[k].ok} n={r.byKind[k].n} />
                 ))}
 
-                <SectionTitle>{t('stats.memory')}</SectionTitle>
-                <RatioBar label={t('stats.memory')} ok={r.ascension.correct} n={r.ascension.taps} />
-
                 <div className="mt-4 grid grid-cols-3 gap-2">
+                  <StatTile label={t('stats.timing')} value={r.timingMs !== null ? `±${r.timingMs}` : '—'} />
                   <StatTile label={t('stats.impulsive')} value={String(r.impulsive)} />
                   <StatTile label={t('stats.reboots')} value={String(r.reboots)} />
-                  <StatTile label={t('stats.assists')} value={String(r.assists)} />
                 </div>
               </>
             )}
@@ -85,7 +88,7 @@ export function StatsScreen() {
         <p className="mt-8 text-[12px] leading-relaxed text-mist">{t('stats.note')}</p>
         <p className="mt-2 text-[12px] leading-relaxed text-mist">{t('set.privacy')}</p>
 
-        {(runs.length > 0 || useApp.getState().checkpoint) && (
+        {(runs.length > 0 || checkpoint) && (
           <div className="mt-6">
             {confirm ? (
               <div className="grid grid-cols-2 gap-2">

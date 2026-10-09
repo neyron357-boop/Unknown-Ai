@@ -1,74 +1,100 @@
 /**
- * Core game vocabulary. Everything in `game/core` is pure TypeScript with no
- * Phaser / DOM dependency so it can be unit-tested, simulated, and later reused
- * inside a native shell without rewriting game rules.
+ * Core vocabulary of the rhythm duel. Everything in `game/core` is pure
+ * TypeScript (no Phaser, no DOM): rules can be simulated and unit-tested,
+ * and reused in a native shell later.
  */
 
-/** Attack families of the first antagonist. Each has a unique visual + audio telegraph. */
-export type AttackType = 'slashL' | 'slashR' | 'crush' | 'pierce';
+/** Player inputs. Tap = parry / strike, swipes = duck, jump, pick a side. */
+export type Action = 'tap' | 'up' | 'down' | 'left' | 'right';
 
-/** Player responses. Swipe left/right = dash, tap/hold = shield. */
-export type Action = 'dodgeL' | 'dodgeR' | 'block';
+/**
+ * Attack families.
+ *  mid  — straight thrust at the chest → parry with a TAP on the beat
+ *  high — horizontal swing at head height → DUCK (swipe down)
+ *  low  — sweep at the legs → JUMP (swipe up)
+ */
+export type AttackKind = 'mid' | 'high' | 'low';
 
-export type StageId = 'awakening' | 'contact' | 'pattern' | 'ascension' | 'evolution';
+export type RoundKind = 'takt' | 'phantoms' | 'overcharge' | 'ascension';
 
 export type ModeId = 'spark' | 'flow' | 'calm';
 
+/** When the attack kind becomes visible: 2 beats before impact, 1 beat before, or never. */
+export type Reveal = 'early' | 'late' | 'blind';
+
 /**
- * How a single attack was resolved.
- * - read: the player committed the correct response *before* the telegraph (prediction).
- * - react: correct response during the telegraph.
- * - recovered: wrong prediction, but corrected in time after the stagger.
- * - wrong: first reaction during the telegraph was the wrong action.
- * - miss: no response at all.
- * - misread: wrong prediction and no successful correction.
+ * perfect / good — correct action inside the window
+ * miss   — no reaction to a real attack (hit taken)
+ * wrong  — wrong action (hit taken)
+ * fooled — reacted to a phantom (combo broken)
+ * ignored — correctly let a phantom pass
  */
-export type Outcome = 'read' | 'react' | 'recovered' | 'wrong' | 'miss' | 'misread';
+export type Judgement = 'perfect' | 'good' | 'miss' | 'wrong' | 'fooled' | 'ignored';
 
-export const SUCCESS_OUTCOMES: ReadonlySet<Outcome> = new Set(['read', 'react', 'recovered']);
+export const SUCCESS: ReadonlySet<Judgement> = new Set(['perfect', 'good', 'ignored']);
 
-export function isSuccess(outcome: Outcome): boolean {
-  return SUCCESS_OUTCOMES.has(outcome);
+export function isSuccess(j: Judgement): boolean {
+  return SUCCESS.has(j);
 }
+
+export const RESPONSE: Record<AttackKind, Action> = { mid: 'tap', high: 'down', low: 'up' };
+
+export type UpgradeId =
+  | 'resonance'
+  | 'foresight'
+  | 'secondWind'
+  | 'coldMind'
+  | 'bloodRhythm'
+  | 'phantomSight'
+  | 'overclock'
+  | 'echoMemory'
+  | 'thirst';
 
 export interface AttackRecord {
-  /** Sequential index across the whole mission. */
   i: number;
-  stage: StageId;
-  type: AttackType;
-  telegraphMs: number;
-  /** Prediction committed during the gap, if any. */
-  predicted: Action | null;
-  predictedCorrect: boolean | null;
-  /** First reaction during the telegraph, if any. */
-  response: Action | null;
-  /** ms from telegraph start to the correct reaction (only for react / recovered). */
+  round: RoundKind;
+  loop: number;
+  kind: AttackKind;
+  phantom: boolean;
+  reveal: Reveal;
+  impactMs: number;
+  action: Action | null;
+  /** input time − impact time (ms); negative = early. */
+  offsetMs: number | null;
+  /** input time − reveal time (ms) for revealed attacks. */
   reactionMs: number | null;
-  outcome: Outcome;
-  hinted: boolean;
-  /** Mission clock (ms) when the attack resolved. */
-  t: number;
+  judgement: Judgement;
 }
 
-export interface AscensionTap {
-  /** Node the player tapped (null = tapped empty space / timed out). */
-  node: number | null;
-  expected: number;
+export interface StrikeRecord {
+  round: RoundKind;
+  onBeat: boolean;
+  offsetMs: number;
+  damage: number;
+}
+
+export type OrbOp = { op: '+' | '×' | '−'; n: number };
+
+export interface OrbRecord {
+  i: number;
+  energyBefore: number;
+  left: OrbOp;
+  right: OrbOp;
+  chosen: 'left' | 'right' | null;
   correct: boolean;
-  /** ms from the start of the recall window. */
-  ms: number;
+  decisionMs: number | null;
 }
 
-export interface AscensionRecord {
-  index: number;
-  trigger: 'read' | 'react' | 'assist';
+export interface RecallRecord {
   sequence: number[];
-  taps: AscensionTap[];
+  taps: { node: number | null; expected: number; correct: boolean; ms: number }[];
 }
 
-export interface TutorialRecord {
-  expect: Action;
-  /** ms from prompt to correct input, or null if it auto-completed. */
-  ms: number | null;
-  wrongInputs: number;
+export function applyOp(energy: number, o: OrbOp): number {
+  const v = o.op === '+' ? energy + o.n : o.op === '×' ? energy * o.n : energy - o.n;
+  return Math.max(0, Math.min(99, v));
+}
+
+export function opLabel(o: OrbOp): string {
+  return `${o.op}${o.n}`;
 }

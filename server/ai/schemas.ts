@@ -4,7 +4,6 @@ import type { DebriefPayload } from '../../shared/debrief';
 const ratio = z.number().min(0).max(1);
 const ms = z.number().int().min(0).max(60_000).nullable();
 const count = z.number().int().min(0).max(10_000);
-const attackType = z.enum(['slashL', 'slashR', 'crush', 'pierce']);
 
 /**
  * Debrief request: a compact, numeric-only description of a finished run.
@@ -16,30 +15,26 @@ export const debriefSchema = z.object({
   run: z.object({
     mode: z.enum(['spark', 'flow', 'calm']),
     durationSec: z.number().int().min(0).max(7200),
+    grade: z.enum(['S', 'A', 'B', 'C']),
     accuracy: ratio,
     reactionMedianMs: ms,
-    predictionsAttempted: count,
-    predictionsCorrect: count,
-    longestReadStreak: count,
-    weakPointsCorrect: count,
-    weakPointsTotal: count,
+    timingMs: ms,
+    blindAttempted: count,
+    blindCorrect: count,
+    phantoms: count,
+    fooled: count,
+    calcCorrect: count,
+    calcTotal: count,
+    recallCorrect: count,
+    recallTotal: count,
+    maxCombo: count,
     impulsive: count,
     reboots: count,
-    assists: count,
-    bestDecision: z.enum(['perfectAscension', 'readStreak', 'fastReaction', 'recovered', 'firstRead', 'persistence']),
-    weakestType: attackType.nullable(),
+    bestDecision: z.enum(['perfectAscension', 'blindRead', 'ironWill', 'mathMind', 'perfectStreak', 'comboKing', 'fastReaction', 'persistence']),
+    weakestKind: z.enum(['mid', 'high', 'low']).nullable(),
   }),
-  history: z
-    .object({
-      runs: count,
-      previousAccuracy: ratio.nullable(),
-      previousReactionMs: ms,
-    })
-    .optional(),
-  patterns: z
-    .array(z.enum(['typeWeakness', 'impulsive', 'latePredictor', 'memoryGap']))
-    .max(4)
-    .default([]),
+  history: z.object({ runs: count, previousAccuracy: ratio.nullable(), previousReactionMs: ms }).optional(),
+  patterns: z.array(z.enum(['typeWeakness', 'impulsive', 'blindStruggle', 'phantomBait', 'mathSlip', 'memoryGap'])).max(6).default([]),
 });
 
 export type DebriefRequest = z.infer<typeof debriefSchema>;

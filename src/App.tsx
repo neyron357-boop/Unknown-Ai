@@ -39,11 +39,6 @@ export function App() {
     audio.setPrefs({ musicOn: s.musicOn, sfxOn: s.sfxOn, musicVolume: s.musicVolume, sfxVolume: s.sfxVolume, volumeLimit: s.volumeLimit });
   }, []);
 
-  // Menu music: calm ambient bed outside missions.
-  useEffect(() => {
-    if (screen !== 'mission' && screen !== 'title') audio.setIntensity('ambient', 1.5);
-  }, [screen]);
-
   useEffect(() => {
     document.documentElement.lang = lang;
   }, [lang]);

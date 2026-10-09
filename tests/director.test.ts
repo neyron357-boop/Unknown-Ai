@@ -1,325 +1,296 @@
 import { describe, expect, it } from 'vitest';
-import { MissionDirector, type DirectorEvent } from '@/game/core/director';
-import { buildMissionConfig } from '@/game/core/missionConfig';
-import { hintActions, isCorrect } from '@/game/core/rules';
-import type { Action, AttackType, ModeId } from '@/game/core/types';
+import { DuelDirector, type Checkpoint, type DirectorEvent } from '@/game/core/director';
+import { makeOrbPair, planTakt, buildTuning } from '@/game/core/plan';
+import { createRng } from '@/game/core/random';
+import { applyOp, RESPONSE, type Action, type AttackKind, type ModeId } from '@/game/core/types';
 
-type Bot = (e: DirectorEvent, d: MissionDirector, schedule: (inMs: number, fn: () => void) => void) => void;
+type Schedule = (at: number, fn: () => void) => void;
+type Bot = (e: DirectorEvent, d: DuelDirector, at: Schedule) => void;
 
-/** Runs a director to completion with a bot, using a fixed 16ms frame step. */
-function simulate(director: MissionDirector, bot: Bot, maxMs = 15 * 60_000) {
+function simulate(d: DuelDirector, bot: Bot, maxMs = 20 * 60_000, step = 16) {
   const events: DirectorEvent[] = [];
   const timers: { at: number; fn: () => void }[] = [];
-  const schedule = (inMs: number, fn: () => void) => timers.push({ at: director.getNow() + inMs, fn });
-  director.on((e) => {
+  const schedule: Schedule = (at, fn) => timers.push({ at, fn });
+  d.on((e) => {
     events.push(e);
-    bot(e, director, schedule);
+    bot(e, d, schedule);
   });
-  director.start();
-  let elapsed = 0;
-  while (director.getPhase() !== 'complete' && elapsed < maxMs) {
-    director.update(16);
-    elapsed += 16;
-    for (let k = timers.length - 1; k >= 0; k--) {
-      if (timers[k].at <= director.getNow()) {
-        const [t] = timers.splice(k, 1);
-        t.fn();
-      }
-    }
+  d.start();
+  while (d.getPhase() !== 'complete' && d.getNow() < maxMs) {
+    d.update(step);
+    timers.sort((a, b) => a.at - b.at);
+    while (timers.length && timers[0].at <= d.getNow()) timers.shift()!.fn();
   }
-  return { events, result: director.getResult() };
+  return { events, result: d.getResult() };
+}
+
+/** Peeks at the hidden kind of an attack (tests only). */
+function kindOf(d: DuelDirector, id: number): AttackKind {
+  const live = (d as unknown as { live: { id: number; plan: { kind: AttackKind } }[] }).live;
+  return live.find((a) => a.id === id)!.plan.kind;
+}
+
+function perfectBot(offset = 0): Bot {
+  const runes: number[] = [];
+  return (e, d, at) => {
+    if (e.type === 'windup') {
+      if (e.phantom) return;
+      const kind = e.kind ?? kindOf(d, e.id);
+      at(e.impactAt + offset, () => d.input(RESPONSE[kind], e.impactAt + offset));
+    }
+    if (e.type === 'open') e.beats.forEach((b) => at(b, () => d.input('tap', b)));
+    if (e.type === 'orbs') {
+      const better = applyOp(e.energy, e.left) >= applyOp(e.energy, e.right) ? 'left' : 'right';
+      at(e.at + 300, () => d.input(better, e.at + 300));
+    }
+    if (e.type === 'upgradeOffer') at(d.getNow() + 500, () => d.chooseUpgrade(e.cards[0]));
+    if (e.type === 'rune' && e.pass === 0) runes.push(e.node);
+    if (e.type === 'recall') runes.forEach((n, k) => at(d.getNow() + 400 * (k + 1), () => d.tapNode(n)));
+  };
 }
 
 const idleBot: Bot = () => {};
 
-const firstCorrect = (attack: AttackType): Action => hintActions(attack)[0];
+const modes: ModeId[] = ['spark', 'flow', 'calm'];
 
-/** Reacts correctly 250ms into every telegraph and taps every weak point correctly. */
-const reactiveBot: Bot = (e, d, schedule) => {
-  if (e.type === 'tutorialStep') schedule(400, () => d.input(e.expect));
-  if (e.type === 'telegraph') schedule(250, () => d.input(firstCorrect(e.attack)));
-  if (e.type === 'ascendRecall') {
-    // replay the sequence the director showed
-    sequenceTaps(d, schedule);
-  }
-};
-
-let shownNodes: number[] = [];
-function sequenceTaps(d: MissionDirector, schedule: (inMs: number, fn: () => void) => void) {
-  const nodes = [...shownNodes];
-  shownNodes = [];
-  nodes.forEach((n, k) => schedule(300 * (k + 1), () => d.tapNode(n)));
-}
-
-/** Learns the loop from observation and predicts during the gap once it has seen one full cycle. */
-function makePredictorBot(): Bot {
-  let history: AttackType[] = [];
-  return (e, d, schedule) => {
-    if (e.type === 'stage') history = [];
-    if (e.type === 'ascendNode') shownNodes.push(e.node);
-    if (e.type === 'tutorialStep') schedule(300, () => d.input(e.expect));
-    if (e.type === 'gap' && e.predictable) {
-      const period = findPeriod(history);
-      if (period) {
-        const next = history[history.length - period];
-        schedule(200, () => d.input(firstCorrect(next)));
-      }
-    }
-    if (e.type === 'telegraph') {
-      history.push(e.attack);
-      schedule(260, () => d.input(firstCorrect(e.attack)));
-    }
-    if (e.type === 'ascendRecall') sequenceTaps(d, schedule);
-  };
-}
-
-function findPeriod(h: AttackType[]): number | null {
-  for (let p = 2; p <= 6; p++) {
-    if (h.length < p * 2) continue;
-    let ok = true;
-    for (let k = p; k < h.length; k++) if (h[k] !== h[k - p]) ok = false;
-    if (ok) return p;
-  }
-  return null;
-}
-
-describe('rules', () => {
-  it('maps every attack to a fixed correct response', () => {
-    expect(isCorrect('slashL', 'dodgeR')).toBe(true);
-    expect(isCorrect('slashL', 'dodgeL')).toBe(false);
-    expect(isCorrect('slashR', 'dodgeL')).toBe(true);
-    expect(isCorrect('crush', 'block')).toBe(true);
-    expect(isCorrect('crush', 'dodgeL')).toBe(false);
-    expect(isCorrect('pierce', 'block')).toBe(false);
-    expect(isCorrect('pierce', 'dodgeL')).toBe(true);
-    expect(isCorrect('pierce', 'dodgeR')).toBe(true);
-  });
-});
-
-describe('MissionDirector — completability', () => {
-  const modes: ModeId[] = ['spark', 'flow', 'calm'];
-
-  it.each(modes)('an idle player still reaches the end (%s)', (mode) => {
-    const d = new MissionDirector({ mode, seed: 42 });
+describe('DuelDirector — a run always completes', () => {
+  it.each(modes)('idle player still reaches the finisher (%s)', (mode) => {
+    const d = new DuelDirector({ mode, seed: 4 });
     const { events, result } = simulate(d, idleBot);
     expect(result).not.toBeNull();
     expect(events.some((e) => e.type === 'finisher')).toBe(true);
-    expect(result!.assists).toBe(2);
+    expect(result!.grade).toBe('C');
     expect(result!.reboots).toBeGreaterThan(0);
-    expect(result!.accuracy).toBe(0);
+    // phantoms are ignored automatically → those count as correct
+    expect(result!.inhibition.fooled).toBe(0);
+    expect(events.filter((e) => e.type === 'upgradePicked' && e.auto)).toHaveLength(3);
   });
 
-  it.each(modes)('a reactive player finishes in ~2.5–5 minutes without being hit (%s)', (mode) => {
-    shownNodes = [];
-    const d = new MissionDirector({ mode, seed: 7 });
-    const bot: Bot = (e, dd, s) => {
-      if (e.type === 'ascendNode') shownNodes.push(e.node);
-      reactiveBot(e, dd, s);
-    };
-    const { result } = simulate(d, bot);
-    expect(result).not.toBeNull();
-    expect(result!.accuracy).toBe(1);
-    expect(result!.reboots).toBe(0);
-    expect(result!.ascension.correct).toBe(result!.ascension.taps);
-    expect(result!.reactionMedianMs).toBeGreaterThanOrEqual(250);
-    expect(result!.durationMs).toBeGreaterThan(120_000);
-    expect(result!.durationMs).toBeLessThan(300_000);
+  it.each(modes)('perfect player gets S, 100%% and 4 rounds in 1.5–4 minutes (%s)', (mode) => {
+    const d = new DuelDirector({ mode, seed: 9 });
+    const { events, result } = simulate(d, perfectBot());
+    const r = result!;
+    expect(r.grade).toBe('S');
+    expect(r.accuracy).toBe(1);
+    expect(r.perfects).toBe(r.attacks - r.inhibition.phantoms);
+    expect(r.calc.correct).toBe(r.calc.choices);
+    expect(r.recall.correct).toBe(r.recall.taps);
+    expect(r.strikes.onBeat).toBe(r.strikes.total);
+    expect(r.hitsTaken).toBe(0);
+    expect(events.filter((e) => e.type === 'round')).toHaveLength(4);
+    expect(r.durationMs).toBeGreaterThan(90_000);
+    expect(r.durationMs).toBeLessThan(240_000);
   });
 
-  it.each(modes)('a predicting player reads the loop and finishes faster (%s)', (mode) => {
-    shownNodes = [];
-    const reactive = simulate(new MissionDirector({ mode, seed: 11 }), (e, dd, s) => {
-      if (e.type === 'ascendNode') shownNodes.push(e.node);
-      reactiveBot(e, dd, s);
-    }).result!;
-    shownNodes = [];
-    const d = new MissionDirector({ mode, seed: 11 });
-    const { result } = simulate(d, makePredictorBot());
-    expect(result).not.toBeNull();
-    expect(result!.durationMs).toBeLessThan(reactive.durationMs - 15_000);
-    expect(result!.reads).toBeGreaterThanOrEqual(4);
-    expect(result!.predictions.correct).toBe(result!.predictions.attempts);
-    expect(result!.assists).toBe(0);
-    expect(result!.accuracy).toBe(1);
-    expect(result!.bestDecision.kind).toBe('perfectAscension');
-    expect(result!.durationMs).toBeGreaterThan(90_000);
-    expect(result!.durationMs).toBeLessThan(300_000);
+  it('a mashing player (tap every 150ms) is held back by the impatience lock', () => {
+    const d = new DuelDirector({ mode: 'spark', seed: 2 });
+    let last = 0;
+    const { result } = simulate(d, (e, dd) => {
+      if (e.type === 'beat' || e.type === 'windup') {
+        const now = dd.getNow();
+        if (now - last >= 150) {
+          last = now;
+          dd.input('tap', now);
+        }
+      }
+      if (e.type === 'upgradeOffer') dd.chooseUpgrade(e.cards[0]);
+    });
+    expect(result!.impulsive).toBeGreaterThan(10);
+    expect(result!.grade).not.toBe('S');
   });
 });
 
-describe('MissionDirector — rules are honest and deterministic', () => {
-  it('the pattern stage repeats the configured loop exactly', () => {
-    const cfg = buildMissionConfig({ mode: 'flow', seed: 1 });
-    const d = new MissionDirector({ config: cfg });
-    const seen: AttackType[] = [];
-    let stage = '';
-    simulate(d, (e) => {
-      if (e.type === 'stage') stage = e.loop ?? '';
-      if (e.type === 'telegraph' && stage === 'pattern') seen.push(e.attack);
-    });
-    expect(seen.length).toBeGreaterThan(cfg.pattern.loop.length);
-    seen.forEach((t, k) => expect(t).toBe(cfg.pattern.loop[k % cfg.pattern.loop.length]));
-  });
-
-  it('same seed + same inputs → identical weak-point sequences and results', () => {
-    const run = () => {
-      shownNodes = [];
-      const d = new MissionDirector({ mode: 'spark', seed: 99 });
-      const nodes: number[] = [];
-      const { result } = simulate(d, (e, dd, s) => {
-        if (e.type === 'ascendNode') nodes.push(e.node);
-        makePredictorBotSingleton(e, dd, s);
-      });
-      return { nodes, result };
-    };
-    const predictor = makePredictorBot();
-    const makePredictorBotSingleton: Bot = (e, d, s) => predictor(e, d, s);
-    const a = run();
-    const b = run();
-    expect(a.nodes).toEqual(b.nodes);
-    expect(a.result!.accuracy).toBe(b.result!.accuracy);
-    expect(a.result!.durationMs).toBe(b.result!.durationMs);
-  });
-
-  it('a wrong prediction staggers, then a correct reaction counts as recovered', () => {
-    const d = new MissionDirector({ mode: 'spark', seed: 3 });
-    let inPattern = false;
-    let done = false;
-    const outcomes: string[] = [];
-    simulate(d, (e, dd, s) => {
-      if (e.type === 'tutorialStep') s(200, () => dd.input(e.expect));
-      if (e.type === 'stage') inPattern = e.loop === 'pattern';
-      if (e.type === 'gap' && inPattern && !done) {
-        done = true;
-        // first pattern attack is slashL → predicting "dodgeL" is wrong
-        s(100, () => dd.input('dodgeL'));
-      }
-      if (e.type === 'stagger') s(e.durationMs + 40, () => dd.input('dodgeR'));
-      if (e.type === 'resolve' && e.record.stage === 'pattern') outcomes.push(e.record.outcome);
-    });
-    expect(outcomes[0]).toBe('recovered');
-  });
-
-  it('inputs during the stagger are ignored', () => {
-    const d = new MissionDirector({ mode: 'spark', seed: 3 });
-    let inPattern = false;
-    let done = false;
-    const ignored: Action[] = [];
-    const outcomes: string[] = [];
-    simulate(d, (e, dd, s) => {
-      if (e.type === 'tutorialStep') s(200, () => dd.input(e.expect));
-      if (e.type === 'stage') inPattern = e.loop === 'pattern';
-      if (e.type === 'gap' && inPattern && !done) {
-        done = true;
-        s(100, () => dd.input('dodgeL'));
-      }
-      if (e.type === 'stagger') s(100, () => dd.input('dodgeR'));
-      if (e.type === 'inputIgnored') ignored.push(e.action);
-      if (e.type === 'resolve' && e.record.stage === 'pattern') outcomes.push(e.record.outcome);
-    });
-    expect(ignored).toContain('dodgeR');
-    expect(outcomes[0]).toBe('misread');
-  });
-
-  it('first reaction is final: a wrong reaction cannot be corrected', () => {
-    const d = new MissionDirector({ mode: 'spark', seed: 5 });
-    const outcomes: string[] = [];
-    let first = true;
-    simulate(d, (e, dd, s) => {
-      if (e.type === 'tutorialStep') s(200, () => dd.input(e.expect));
-      if (e.type === 'telegraph' && first) {
-        first = false;
-        s(100, () => dd.input('block')); // slashL needs dodgeR
-        s(200, () => dd.input('dodgeR'));
-      }
-      if (e.type === 'resolve') outcomes.push(e.record.outcome);
-    });
-    expect(outcomes[0]).toBe('wrong');
-  });
-
-  it('shows adaptive hints after two failures on the same attack type', () => {
-    const d = new MissionDirector({ mode: 'spark', seed: 5, hints: true });
-    const hinted: boolean[] = [];
-    simulate(d, (e) => {
-      if (e.type === 'telegraph' && e.attack === 'slashL') hinted.push(e.hint !== null);
-    });
-    // contact: #1 is demo (hinted), #2 not yet (1 failure), from #3 onward hinted (≥2 failures)
-    expect(hinted[0]).toBe(true);
-    expect(hinted[1]).toBe(false);
-    expect(hinted[2]).toBe(true);
-  });
-
-  it('hints can be disabled (demo hints remain)', () => {
-    const d = new MissionDirector({ mode: 'spark', seed: 5, hints: false });
-    const hinted: boolean[] = [];
-    simulate(d, (e) => {
-      if (e.type === 'telegraph' && e.attack === 'slashL') hinted.push(e.hint !== null);
-    });
-    expect(hinted[0]).toBe(true);
-    expect(hinted.slice(1).every((h) => !h)).toBe(true);
-  });
-
-  it('large update steps produce the same timeline as small ones', () => {
-    const timeline = (step: number) => {
-      const d = new MissionDirector({ mode: 'calm', seed: 8 });
-      const out: string[] = [];
-      d.on((e) => out.push(`${e.type}@${Math.round(d.getNow())}`));
-      d.start();
-      while (d.getPhase() !== 'complete') d.update(step);
-      return out;
-    };
-    expect(timeline(1000)).toEqual(timeline(16));
-  });
-});
-
-describe('MissionDirector — checkpoints', () => {
-  it('offers a checkpoint at the pattern stage and resumes from it', () => {
-    const d = new MissionDirector({ mode: 'spark', seed: 21 });
-    let cp: ReturnType<MissionDirector['getCheckpoint']> = null;
+describe('DuelDirector — timing and rules', () => {
+  function firstAttack(seed = 1) {
+    const d = new DuelDirector({ mode: 'spark', seed });
+    let first: Extract<DirectorEvent, { type: 'windup' }> | null = null;
     d.on((e) => {
-      if (e.type === 'stage' && e.loop === 'pattern') cp = d.getCheckpoint();
+      if (e.type === 'windup' && !first) first = e;
     });
     d.start();
-    while (!cp && d.getPhase() !== 'complete') d.update(16);
-    expect(cp).not.toBeNull();
-    expect(cp!.resumeAt).toBe('pattern');
+    while (!first) d.update(16);
+    return { d, w: first as Extract<DirectorEvent, { type: 'windup' }> };
+  }
 
-    const resumed = new MissionDirector({ resume: cp! });
-    const stages: string[] = [];
-    resumed.on((e) => {
-      if (e.type === 'stage') stages.push(e.loop ?? e.stage);
-    });
-    resumed.start();
-    while (resumed.getPhase() !== 'complete') resumed.update(50);
-    expect(stages[0]).toBe('pattern');
-    const result = resumed.getResult()!;
-    // records from before the checkpoint are kept
-    expect(result.byStage.contact.n).toBe(10);
+  const judgeOf = (d: DuelDirector) => {
+    const out: string[] = [];
+    d.on((e) => e.type === 'judge' && out.push(e.record.judgement));
+    return out;
+  };
+
+  it('first loop reveals the kind early and shows a hint', () => {
+    const { w } = firstAttack();
+    expect(w.kind).not.toBeNull();
+    expect(w.hint).toBe(true);
   });
 
-  it('resumed run reveals the same weak points as an uninterrupted one', () => {
-    const collect = (dir: MissionDirector) => {
-      const nodes: number[] = [];
-      dir.on((e) => {
-        if (e.type === 'ascendNode') nodes.push(e.node);
-      });
-      return nodes;
-    };
-    const full = new MissionDirector({ mode: 'spark', seed: 77 });
-    const fullNodes = collect(full);
-    let cp: ReturnType<MissionDirector['getCheckpoint']> = null;
-    full.on((e) => {
-      if (e.type === 'stage' && e.loop === 'overdrive') cp = full.getCheckpoint();
-    });
-    full.start();
-    while (full.getPhase() !== 'complete') full.update(16);
-    expect(cp).not.toBeNull();
+  it('the first real low strike (new move) is taught: early reveal + hint, later ones are not', () => {
+    let checked = 0;
+    for (const seed of [1, 2, 3, 7, 11]) {
+      const { events } = simulate(new DuelDirector({ mode: 'spark', seed }), perfectBot());
+      let round = '';
+      const lows: { hint: boolean; revealed: boolean }[] = [];
+      for (const e of events) {
+        if (e.type === 'round') round = e.kind;
+        if (e.type === 'windup' && round === 'phantoms' && !e.phantom && e.strikeKind === 'low') lows.push({ hint: e.hint, revealed: e.kind !== null });
+      }
+      if (!lows.length) continue;
+      checked++;
+      expect(lows[0]).toEqual({ hint: true, revealed: true });
+      expect(lows.slice(1).every((l) => !l.hint)).toBe(true);
+    }
+    expect(checked).toBeGreaterThanOrEqual(3);
+  });
 
-    const resumed = new MissionDirector({ resume: cp! });
-    const resumedNodes = collect(resumed);
-    resumed.start();
-    while (resumed.getPhase() !== 'complete') resumed.update(16);
-    expect(resumedNodes).toEqual(fullNodes.slice(fullNodes.length - resumedNodes.length));
-    expect(resumedNodes.length).toBeGreaterThan(0);
+  it.each([
+    [0, 'perfect'],
+    [45, 'perfect'],
+    [-100, 'good'],
+    [110, 'good'],
+  ])('input at impact%+dms → %s', (offset, expected) => {
+    const { d, w } = firstAttack();
+    const j = judgeOf(d);
+    while (d.getNow() < w.impactAt + offset) d.update(8);
+    d.input(RESPONSE[w.kind!], w.impactAt + offset);
+    d.update(400);
+    expect(j[0]).toBe(expected);
+  });
+
+  it('a too-late or missing input is a miss and costs integrity', () => {
+    const { d, w } = firstAttack();
+    const j = judgeOf(d);
+    while (d.getNow() < w.impactAt + 400) d.update(16);
+    expect(j[0]).toBe('miss');
+    expect(d.getMeters().integrity).toBe(85);
+  });
+
+  it('the wrong action is judged wrong', () => {
+    const { d, w } = firstAttack();
+    const j = judgeOf(d);
+    const wrong: Action = w.kind === 'mid' ? 'down' : 'tap';
+    while (d.getNow() < w.impactAt) d.update(8);
+    d.input(wrong, w.impactAt);
+    expect(j[0]).toBe('wrong');
+  });
+
+  it('pressing during the windup locks input briefly (impatience)', () => {
+    const { d, w } = firstAttack();
+    const j = judgeOf(d);
+    const strays: string[] = [];
+    d.on((e) => e.type === 'stray' && strays.push(e.action));
+    const early = w.impactAt - 300;
+    while (d.getNow() < early) d.update(8);
+    d.input('tap', early); // too early → lock 220ms
+    d.input(RESPONSE[w.kind!], w.impactAt - 100); // inside the lock → ignored
+    d.update(600);
+    expect(strays.length).toBe(2);
+    expect(j[0]).toBe('miss');
+  });
+
+  it('inputs carry touch timestamps: a late-arriving tap is judged by when the finger landed', () => {
+    const { d, w } = firstAttack();
+    const j = judgeOf(d);
+    while (d.getNow() < w.impactAt + 100) d.update(16);
+    d.input(RESPONSE[w.kind!], w.impactAt + 10); // classified 90ms later
+    expect(j[0]).toBe('perfect');
+  });
+
+  it('the takt pattern repeats exactly, then goes blind', () => {
+    const t = buildTuning('spark');
+    const loops = planTakt(5, t);
+    const pattern = loops[0].attacks.map((a) => a.kind).join();
+    loops.forEach((l) => expect(l.attacks.map((a) => a.kind).join()).toBe(pattern));
+    expect(loops.map((l) => l.attacks[0].reveal)).toEqual(['early', 'early', 'late', 'blind']);
+    expect(loops[0].attacks.some((a) => a.kind === 'mid')).toBe(true);
+    expect(loops[0].attacks.some((a) => a.kind === 'high')).toBe(true);
+  });
+
+  it('reacting to a phantom is "fooled"; letting it pass is "ignored"', () => {
+    const d = new DuelDirector({ mode: 'spark', seed: 3 });
+    const verdicts: { phantom: boolean; j: string }[] = [];
+    let flip = false;
+    simulate(d, (e, dd, at) => {
+      if (e.type === 'upgradeOffer') at(dd.getNow() + 10, () => dd.chooseUpgrade(e.cards[0]));
+      if (e.type === 'windup' && e.phantom) {
+        flip = !flip;
+        if (flip) at(e.impactAt, () => dd.input('tap', e.impactAt));
+      }
+      if (e.type === 'judge' && e.record.phantom) verdicts.push({ phantom: true, j: e.record.judgement });
+    });
+    expect(verdicts.some((v) => v.j === 'fooled')).toBe(true);
+    expect(verdicts.some((v) => v.j === 'ignored')).toBe(true);
+  });
+
+  it('orb pairs always have one clearly better option', () => {
+    const rng = createRng(77);
+    for (let e = 0; e < 40; e++) {
+      for (let i = 0; i < 8; i++) {
+        const { left, right } = makeOrbPair(rng, e, i);
+        expect(Math.abs(applyOp(e, left) - applyOp(e, right))).toBeGreaterThanOrEqual(2);
+      }
+    }
+  });
+
+  it('upgrades change rules only between rounds and are offered 3 at a time', () => {
+    const d = new DuelDirector({ mode: 'spark', seed: 12 });
+    const offers: string[][] = [];
+    simulate(d, (e, dd) => {
+      if (e.type === 'upgradeOffer') {
+        offers.push(e.cards);
+        expect(dd.getPhase()).toBe('upgrade');
+        dd.chooseUpgrade(e.cards[0]);
+      }
+    });
+    expect(offers).toHaveLength(3);
+    offers.forEach((o) => expect(new Set(o).size).toBe(3));
+    expect(offers[0]).toContain('phantomSight');
+    expect(d.getUpgrades()).toHaveLength(3);
+  });
+});
+
+describe('DuelDirector — determinism and checkpoints', () => {
+  it('same seed + same inputs → identical results', () => {
+    const run = () => simulate(new DuelDirector({ mode: 'flow', seed: 31 }), perfectBot(30)).result!;
+    const a = run();
+    const b = run();
+    expect(a.score).toBe(b.score);
+    expect(a.durationMs).toBe(b.durationMs);
+    expect(a.records.recall).toEqual(b.records.recall);
+  });
+
+  it('large update steps give the same outcome as small ones', () => {
+    const timeline = (step: number) => {
+      const d = new DuelDirector({ mode: 'calm', seed: 8 });
+      const out: string[] = [];
+      d.on((e) => e.type !== 'beat' && out.push(`${e.type}`));
+      d.start();
+      while (d.getPhase() !== 'complete') d.update(step);
+      return { out, t: d.getNow() };
+    };
+    const a = timeline(16);
+    const b = timeline(1000);
+    expect(b.out).toEqual(a.out);
+  });
+
+  it('a checkpoint at a round start resumes into that round with history kept', () => {
+    const d = new DuelDirector({ mode: 'spark', seed: 21 });
+    let cp: Checkpoint | null = null;
+    simulate(d, (e, dd) => {
+      if (e.type === 'upgradeOffer') dd.chooseUpgrade(e.cards[1]);
+      if (e.type === 'round' && e.kind === 'overcharge' && !cp) cp = dd.getCheckpoint();
+    });
+    expect(cp).not.toBeNull();
+    expect(cp!.round).toBe(2);
+    expect(cp!.upgrades).toHaveLength(2);
+
+    const resumed = new DuelDirector({ resume: cp! });
+    const rounds: string[] = [];
+    const { result } = simulate(resumed, (e, dd) => {
+      if (e.type === 'round') rounds.push(e.kind);
+      if (e.type === 'upgradeOffer') dd.chooseUpgrade(e.cards[0]);
+    });
+    expect(rounds).toEqual(['overcharge', 'ascension']);
+    expect(result!.byRound.takt.n).toBeGreaterThan(0);
+    expect(result!.upgrades).toHaveLength(3);
   });
 });

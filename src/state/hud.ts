@@ -1,61 +1,45 @@
 import { create } from 'zustand';
-import type { CinematicId, EchoLineId, LoopKey } from '@/game/core/director';
-import type { Action, AttackType, StageId } from '@/game/core/types';
+import type { EchoLineId, Meters } from '@/game/core/director';
+import type { Action, RoundKind, UpgradeId } from '@/game/core/types';
 
-export type FeedbackKind = 'read' | 'react' | 'block' | 'recovered' | 'hit' | 'wrong' | 'misread' | 'early' | 'perfect';
+export type CallKind = 'perfect' | 'good' | 'miss' | 'wrong' | 'fooled' | 'ignored' | 'early' | 'onBeat' | 'offBeat' | 'orbGood' | 'orbBad' | 'runeGood' | 'runeBad' | 'clash' | 'shielded';
 
 export interface HudState {
-  stage: StageId;
-  loop: LoopKey | null;
-  traceDepth: number;
-  aura: number;
-  integrity: number;
-  barrier: number;
-  trace: { id: number; type: AttackType }[];
-  feedback: { id: number; kind: FeedbackKind } | null;
-  tutorial: { step: number; total: number; expect: Action; done: boolean } | null;
+  phase: 'intro' | 'round' | 'upgrade' | 'ascend' | 'recall' | 'finisher' | 'complete';
+  round: { index: number; kind: RoundKind; total: number } | null;
+  loop: { index: number; loops: number } | null;
+  meters: Meters;
+  call: { id: number; kind: CallKind; value?: number } | null;
+  directive: { id: number; kind: RoundKind } | null;
+  hint: { id: number; action: Action } | null;
+  prompt: 'strike' | 'orbs' | 'recall' | 'watch' | null;
+  offer: UpgradeId[] | null;
+  upgrades: UpgradeId[];
   echo: { id: number; line: EchoLineId } | null;
-  banner: { id: number; stage: StageId; loop: LoopKey | null } | null;
-  cinematic: { id: number; kind: CinematicId } | null;
-  ascension: {
-    phase: 'trigger' | 'show' | 'recall' | 'strike' | 'finisher';
-    points: number;
-    shown: number;
-    tapped: number;
-    correct: number;
-    recallMs: number;
-    recallStartedAt: number;
-  } | null;
-  hint: Action[] | null;
-  predictWindow: boolean;
-  committed: Action | null;
-  readStreak: number;
+  recall: { points: number; tapped: number } | null;
   rebooting: boolean;
   paused: boolean;
   complete: boolean;
+  intro: { id: number } | null;
 }
 
 export const initialHud: HudState = {
-  stage: 'awakening',
+  phase: 'intro',
+  round: null,
   loop: null,
-  traceDepth: 0,
-  aura: 0,
-  integrity: 100,
-  barrier: 100,
-  trace: [],
-  feedback: null,
-  tutorial: null,
-  echo: null,
-  banner: null,
-  cinematic: null,
-  ascension: null,
+  meters: { integrity: 100, combo: 0, hype: 0, score: 0, enemyHp: 1000, energy: 0 },
+  call: null,
+  directive: null,
   hint: null,
-  predictWindow: false,
-  committed: null,
-  readStreak: 0,
+  prompt: null,
+  offer: null,
+  upgrades: [],
+  echo: null,
+  recall: null,
   rebooting: false,
   paused: false,
   complete: false,
+  intro: null,
 };
 
 export const useHud = create<HudState>()(() => ({ ...initialHud }));

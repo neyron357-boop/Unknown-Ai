@@ -20,7 +20,7 @@ function createSession(onComplete: (r: MissionResult, s: MissionSession) => void
   const adaptation = computeAdaptation(runs, settings.mode);
   const session: MissionSession = new MissionSession({
     mode: resume?.mode ?? settings.mode,
-    telegraphScale: resume?.telegraphScale ?? adaptation.telegraphScale,
+    ease: resume?.ease ?? adaptation.ease,
     hints: settings.hints,
     resume,
     onCheckpoint: (cp) => {
@@ -48,7 +48,7 @@ export default function MissionScreen() {
       modeChosen: settings.modeChosen,
       startedAt: s.startedAt,
       finishedAt: Date.now(),
-      telegraphScale: s.director.config.telegraphScale,
+      ease: s.director.ease,
       result,
     };
     useSettings.getState().set('firstRunDone', true);
@@ -76,7 +76,6 @@ export default function MissionScreen() {
       window.removeEventListener('pagehide', pause);
       window.removeEventListener('blur', pause);
       session.dispose();
-      audio.setSlowmo(false);
     };
   }, [session]);
 
@@ -90,7 +89,7 @@ export default function MissionScreen() {
   return (
     <div className="app-height relative overflow-hidden bg-void">
       <PhaserHost session={session} />
-      <Hud onPause={() => session.pause()} />
+      <Hud onPause={() => session.pause()} onPick={(id) => session.chooseUpgrade(id)} />
       {paused && !complete && (
         <div className="anim-fade absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/75 backdrop-blur-sm">
           <div className="font-display text-[22px] font-bold uppercase tracking-[0.3em] text-bone">{t('pause.title')}</div>

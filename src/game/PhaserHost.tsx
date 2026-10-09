@@ -2,17 +2,20 @@ import { useEffect, useRef } from 'react';
 import Phaser from 'phaser';
 import { getSettings } from '@/state/settings';
 import type { MissionSession } from './MissionSession';
-import { ArenaScene } from './scene/ArenaScene';
+import { DuelScene } from './scene/DuelScene';
 import type { Action } from './core/types';
 
 const KEYS: Record<string, Action> = {
-  ArrowLeft: 'dodgeL',
-  KeyA: 'dodgeL',
-  ArrowRight: 'dodgeR',
-  KeyD: 'dodgeR',
-  Space: 'block',
-  ArrowDown: 'block',
-  KeyS: 'block',
+  Space: 'tap',
+  KeyJ: 'tap',
+  ArrowDown: 'down',
+  KeyS: 'down',
+  ArrowUp: 'up',
+  KeyW: 'up',
+  ArrowLeft: 'left',
+  KeyA: 'left',
+  ArrowRight: 'right',
+  KeyD: 'right',
 };
 
 /**
@@ -45,11 +48,11 @@ export function PhaserHost({ session }: { session: MissionSession }) {
       fps: { target: 60, forceSetTimeOut: false },
       scale: { mode: Phaser.Scale.NONE, zoom: 1 / dpr },
     });
-    game.scene.add('arena', ArenaScene, true, { session, dpr });
+    game.scene.add('duel', DuelScene, true, { session, dpr });
 
     session.onPauseChange = (paused) => {
-      if (paused) game.scene.pause('arena');
-      else game.scene.resume('arena');
+      if (paused) game.scene.pause('duel');
+      else game.scene.resume('duel');
     };
 
     const ro = new ResizeObserver(() => {
@@ -89,9 +92,9 @@ export function PhaserHost({ session }: { session: MissionSession }) {
       const action = KEYS[e.code];
       if (action) {
         e.preventDefault();
-        session.input(action);
+        session.input(action, performance.now());
       } else if (/^Digit[1-6]$/.test(e.code) && !session.isPaused()) {
-        // Desktop testing: digits pick weak-point nodes directly.
+        // Desktop: digits pick runes directly.
         session.director.tapNode(Number(e.code.slice(5)) - 1);
       }
     };

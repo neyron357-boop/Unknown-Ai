@@ -1,7 +1,7 @@
 import { demoDebrief, type DebriefPayload } from '../../shared/debrief';
 import { detectErrorPatterns, type RunSummary } from '@/cognitive/adaptation';
 import type { MissionResult } from '@/game/core/metrics';
-import type { AttackType } from '@/game/core/types';
+import type { AttackKind } from '@/game/core/types';
 import type { Lang } from '@/state/settings';
 
 export type MentorSource = 'gemini' | 'demo' | 'fallback' | 'offline';
@@ -12,13 +12,13 @@ const STATIC_BUILD = import.meta.env.VITE_TARGET === 'artifact';
 
 /** Builds the compact numeric payload. Nothing identifying leaves the device. */
 export function buildDebriefPayload(result: MissionResult, lang: Lang, previous: RunSummary[]): DebriefPayload {
-  let weakestType: AttackType | null = null;
+  let weakestKind: AttackKind | null = null;
   let worst = 0;
-  for (const [type, t] of Object.entries(result.byType) as [AttackType, { n: number; ok: number }][]) {
+  for (const [kind, t] of Object.entries(result.byKind) as [AttackKind, { n: number; ok: number }][]) {
     const miss = t.n - t.ok;
     if (t.n >= 2 && miss > worst) {
       worst = miss;
-      weakestType = type;
+      weakestKind = kind;
     }
   }
   const prev = [...previous].sort((a, b) => b.finishedAt - a.finishedAt)[0];
@@ -28,25 +28,26 @@ export function buildDebriefPayload(result: MissionResult, lang: Lang, previous:
     run: {
       mode: result.mode,
       durationSec: Math.round(result.durationMs / 1000),
+      grade: result.grade,
       accuracy: Math.round(result.accuracy * 1000) / 1000,
       reactionMedianMs: result.reactionMedianMs,
-      predictionsAttempted: result.predictions.attempts,
-      predictionsCorrect: result.predictions.correct,
-      longestReadStreak: result.longestReadStreak,
-      weakPointsCorrect: result.ascension.correct,
-      weakPointsTotal: result.ascension.taps,
+      timingMs: result.timingMs,
+      blindAttempted: result.predictions.attempts,
+      blindCorrect: result.predictions.correct,
+      phantoms: result.inhibition.phantoms,
+      fooled: result.inhibition.fooled,
+      calcCorrect: result.calc.correct,
+      calcTotal: result.calc.choices,
+      recallCorrect: result.recall.correct,
+      recallTotal: result.recall.taps,
+      maxCombo: result.maxCombo,
       impulsive: result.impulsive,
       reboots: result.reboots,
-      assists: result.assists,
       bestDecision: result.bestDecision.kind,
-      weakestType,
+      weakestKind,
     },
     history: prev
-      ? {
-          runs: previous.length,
-          previousAccuracy: Math.round(prev.result.accuracy * 1000) / 1000,
-          previousReactionMs: prev.result.reactionMedianMs,
-        }
+      ? { runs: previous.length, previousAccuracy: Math.round(prev.result.accuracy * 1000) / 1000, previousReactionMs: prev.result.reactionMedianMs }
       : undefined,
     patterns: [...new Set(detectErrorPatterns(result).map((p) => p.kind))],
   };
