@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Audio Lab v3</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #07070a;
+        --fg: #e8e6e3;
+        --dim: #8a8784;
+        --acc: #c21d2b;
+      }
+      body {
+        margin: 0;
+        padding: 16px;
+        background: var(--bg);
+        color: var(--fg);
+        font: 14px/1.4 system-ui, sans-serif;
+      }
+      h1 {
+        font-size: 18px;
+        margin: 0 0 8px;
+      }
+      h2 {
+        font-size: 13px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--dim);
+        margin: 18px 0 6px;
+      }
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        align-items: center;
+      }
+      button {
+        background: #16161c;
+        color: var(--fg);
+        border: 1px solid #2a2a33;
+        border-radius: 6px;
+        padding: 6px 10px;
+        font: inherit;
+        cursor: pointer;
+      }
+      button.on {
+        border-color: var(--acc);
+        color: #fff;
+      }
+      #log {
+        white-space: pre-wrap;
+        font: 12px ui-monospace, monospace;
+        color: var(--dim);
+        margin-top: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>UNKNOWN — audio lab (v3)</h1>
+    <div class="row">
+      <button id="unlock">Unlock audio</button>
+      <label>BPM <input id="bpm" type="number" value="130" min="100" max="135" style="width: 60px" /></label>
+      <label>Hype <input id="hype" type="range" min="0" max="4" value="2" /></label>
+      <button id="stop">Stop (detach)</button>
+      <button id="slowmo">Slow-mo</button>
+      <button id="duck">Duck 1.5 s</button>
+    </div>
+    <h2>Sections (live, conducted by a fake director)</h2>
+    <div class="row" id="sections"></div>
+    <h2>SFX</h2>
+    <div class="row" id="sfx"></div>
+    <h2>Ambience</h2>
+    <div class="row" id="amb"></div>
+    <div id="log"></div>
+    <script type="module" src="./lab.ts"></script>
+  </body>
+</html>

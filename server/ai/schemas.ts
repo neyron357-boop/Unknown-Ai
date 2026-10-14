@@ -1,13 +1,15 @@
 import { z } from 'zod';
-import type { DebriefPayload } from '../../shared/debrief';
+import { BEST_MOMENTS, ENEMY_IDS, ERROR_PATTERNS, type DebriefPayload } from '../../shared/debrief';
 
 const ratio = z.number().min(0).max(1);
 const ms = z.number().int().min(0).max(60_000).nullable();
+/** Signed: negative = before the beat. */
+const signedMs = z.number().int().min(-60_000).max(60_000).nullable();
 const count = z.number().int().min(0).max(10_000);
 
 /**
- * Debrief request: a compact, numeric-only description of a finished run.
- * No free text from the client reaches the model except enum values.
+ * Debrief request (v3, "Blood Moon"): a compact, numeric-only description of a finished fight.
+ * No free text from the client reaches the model — only numbers and enum values.
  */
 export const debriefSchema = z.object({
   kind: z.literal('debrief'),
@@ -17,24 +19,26 @@ export const debriefSchema = z.object({
     durationSec: z.number().int().min(0).max(7200),
     grade: z.enum(['S', 'A', 'B', 'C']),
     accuracy: ratio,
-    reactionMedianMs: ms,
-    timingMs: ms,
-    blindAttempted: count,
-    blindCorrect: count,
-    phantoms: count,
-    fooled: count,
-    calcCorrect: count,
-    calcTotal: count,
-    recallCorrect: count,
-    recallTotal: count,
+    timingMeanMs: ms,
+    timingBiasMs: signedMs,
+    kills: count,
+    decaps: count,
     maxCombo: count,
-    impulsive: count,
+    longestPerfect: count,
+    feintsTotal: count,
+    feintsFooled: count,
+    patternRepeats: count,
+    patternOk: count,
+    execCuts: count,
+    execCorrect: count,
+    hitsTaken: count,
     reboots: count,
-    bestDecision: z.enum(['perfectAscension', 'blindRead', 'ironWill', 'mathMind', 'perfectStreak', 'comboKing', 'fastReaction', 'persistence']),
-    weakestKind: z.enum(['mid', 'high', 'low']).nullable(),
+    impulsive: count,
+    best: z.enum(BEST_MOMENTS),
+    weakestKind: z.enum(ENEMY_IDS).nullable(),
   }),
-  history: z.object({ runs: count, previousAccuracy: ratio.nullable(), previousReactionMs: ms }).optional(),
-  patterns: z.array(z.enum(['typeWeakness', 'impulsive', 'blindStruggle', 'phantomBait', 'mathSlip', 'memoryGap'])).max(6).default([]),
+  history: z.object({ runs: count, previousAccuracy: ratio.nullable(), previousTimingMs: ms }).optional(),
+  patterns: z.array(z.enum(ERROR_PATTERNS)).max(ERROR_PATTERNS.length).default([]),
 });
 
 export type DebriefRequest = z.infer<typeof debriefSchema>;

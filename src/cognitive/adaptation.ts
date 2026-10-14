@@ -1,5 +1,5 @@
-import type { MissionResult } from '@/game/core/metrics';
-import type { ModeId } from '@/game/core/types';
+import type { BattleResult, Grade } from '@/game/v3/core/metrics';
+import type { EnemyKind, ModeId } from '@/game/v3/core/types';
 
 /**
  * UNKNOWN Cognitive Engine — adaptation rules.
@@ -11,7 +11,7 @@ import type { ModeId } from '@/game/core/types';
 
 export interface RunSummary {
   id: string;
-  missionId: 'awakening';
+  missionId: 'bloodmoon';
   mode: ModeId;
   /** Was the mode chosen by the player (vs. the default)? Used for preference stats. */
   modeChosen: boolean;
@@ -19,7 +19,7 @@ export interface RunSummary {
   finishedAt: number;
   /** Difficulty factor used for this run (>1 easier). */
   ease: number;
-  result: MissionResult;
+  result: BattleResult;
 }
 
 export type AdaptationReason = 'baseline' | 'struggling' | 'mastered' | 'steady';
@@ -38,8 +38,8 @@ const STEP = 0.05;
 /**
  * Rule (per mode, last 3 runs):
  *  - fewer than 2 runs → baseline
- *  - mean rating < 0.55 or ≥ 1 reboot per run → +0.05 (slower, wider windows)
- *  - mean rating ≥ 0.88 and no reboots → −0.05 (faster, tighter)
+ *  - mean rating < 0.55 or ≥ 1 reboot per run → +0.05 (wider windows, slower approach)
+ *  - mean rating ≥ 0.88 and no reboots → −0.05 (tighter)
  *  - otherwise keep the last value.
  * One step per run, clamped to [0.85, 1.25], so difficulty never jumps.
  */
@@ -63,81 +63,88 @@ const round2 = (v: number) => Math.round(v * 100) / 100;
 export interface ProfileStats {
   runs: number;
   totalMinutes: number;
-  bestGrade: MissionResult['grade'] | null;
+  bestGrade: Grade | null;
+  bestScore: number;
   bestAccuracy: number;
-  bestReactionMs: number | null;
-  /** Correct share of blind (from-memory) attacks across runs. */
-  blindPrecision: number | null;
-  /** Share of phantoms correctly let through. */
+  /** Lowest mean |timing error| of a run (ms). */
+  bestTimingMs: number | null;
+  /** Share of feints correctly let through. */
   inhibition: number | null;
-  calcAccuracy: number | null;
-  recallAccuracy: number | null;
+  /** Share of repeated boss strings answered correctly (pattern memory). */
+  patternMemory: number | null;
+  /** Share of correct execution cuts (call-and-response memory). */
+  execAccuracy: number | null;
+  totalKills: number;
+  totalDecaps: number;
   chosenModes: Record<ModeId, number>;
   accuracySeries: number[];
-  reactionSeries: number[];
+  timingSeries: number[];
   masteredModes: ModeId[];
 }
 
-const GRADE_ORDER = ['C', 'B', 'A', 'S'] as const;
+const GRADE_ORDER: Grade[] = ['C', 'B', 'A', 'S'];
 
 export function computeProfileStats(history: RunSummary[]): ProfileStats {
   const runs = [...history].sort((a, b) => a.finishedAt - b.finishedAt);
   const chosenModes: Record<ModeId, number> = { spark: 0, flow: 0, calm: 0 };
-  const sum = { blindN: 0, blindOk: 0, ph: 0, phOk: 0, calcN: 0, calcOk: 0, recN: 0, recOk: 0 };
+  const sum = { feints: 0, ignored: 0, repeats: 0, repeatOk: 0, cuts: 0, cutsOk: 0, kills: 0, decaps: 0 };
   const mastered = new Set<ModeId>();
-  let best: MissionResult['grade'] | null = null;
+  let best: Grade | null = null;
   for (const r of runs) {
     const x = r.result;
     if (r.modeChosen) chosenModes[r.mode]++;
-    sum.blindN += x.predictions.attempts;
-    sum.blindOk += x.predictions.correct;
-    sum.ph += x.inhibition.phantoms;
-    sum.phOk += x.inhibition.ignored;
-    sum.calcN += x.calc.choices;
-    sum.calcOk += x.calc.correct;
-    sum.recN += x.recall.taps;
-    sum.recOk += x.recall.correct;
+    sum.feints += x.feints.total;
+    sum.ignored += x.feints.ignored;
+    sum.repeats += x.patterns.repeats;
+    sum.repeatOk += x.patterns.repeatOk;
+    sum.cuts += x.exec.cuts;
+    sum.cutsOk += x.exec.correct;
+    sum.kills += x.kills;
+    sum.decaps += x.decaps;
     if (x.grade === 'S' || x.grade === 'A') mastered.add(r.mode);
     if (!best || GRADE_ORDER.indexOf(x.grade) > GRADE_ORDER.indexOf(best)) best = x.grade;
   }
   const ratio = (ok: number, n: number) => (n ? ok / n : null);
-  const reactions = runs.map((r) => r.result.reactionMedianMs).filter((v): v is number => v !== null);
+  const timing = runs.map((r) => r.result.timing.meanAbsMs).filter((v): v is number => v !== null);
   return {
     runs: runs.length,
     totalMinutes: Math.round(runs.reduce((s, r) => s + r.result.durationMs, 0) / 6000) / 10,
     bestGrade: best,
+    bestScore: runs.reduce((m, r) => Math.max(m, r.result.score), 0),
     bestAccuracy: runs.reduce((m, r) => Math.max(m, r.result.accuracy), 0),
-    bestReactionMs: reactions.length ? Math.min(...reactions) : null,
-    blindPrecision: ratio(sum.blindOk, sum.blindN),
-    inhibition: ratio(sum.phOk, sum.ph),
-    calcAccuracy: ratio(sum.calcOk, sum.calcN),
-    recallAccuracy: ratio(sum.recOk, sum.recN),
+    bestTimingMs: timing.length ? Math.min(...timing) : null,
+    inhibition: ratio(sum.ignored, sum.feints),
+    patternMemory: ratio(sum.repeatOk, sum.repeats),
+    execAccuracy: ratio(sum.cutsOk, sum.cuts),
+    totalKills: sum.kills,
+    totalDecaps: sum.decaps,
     chosenModes,
     accuracySeries: runs.map((r) => r.result.accuracy),
-    reactionSeries: reactions,
+    timingSeries: timing,
     masteredModes: [...mastered],
   };
 }
 
-export type ErrorPatternKind = 'typeWeakness' | 'impulsive' | 'blindStruggle' | 'phantomBait' | 'mathSlip' | 'memoryGap';
+export type ErrorPatternKind = 'typeWeakness' | 'impulsive' | 'feintBait' | 'patternGap' | 'execGap' | 'early' | 'late';
 
 export interface ErrorPattern {
   kind: ErrorPatternKind;
-  detail: string;
+  detail: EnemyKind | 'boss' | 'exec' | 'timing' | 'feints' | 'input';
   count: number;
 }
 
 /** Repeated error patterns of a run — the facts an AI mentor may comment on. */
-export function detectErrorPatterns(r: MissionResult): ErrorPattern[] {
+export function detectErrorPatterns(r: BattleResult): ErrorPattern[] {
   const out: ErrorPattern[] = [];
-  for (const [kind, t] of Object.entries(r.byKind)) {
+  for (const [kind, t] of Object.entries(r.byKind) as [EnemyKind | 'boss', { n: number; ok: number }][]) {
     const miss = t.n - t.ok;
     if (t.n >= 3 && miss >= 2 && miss / t.n >= 0.35) out.push({ kind: 'typeWeakness', detail: kind, count: miss });
   }
-  if (r.impulsive >= 3) out.push({ kind: 'impulsive', detail: 'early-input', count: r.impulsive });
-  if (r.predictions.attempts >= 4 && r.predictions.correct / r.predictions.attempts < 0.6) out.push({ kind: 'blindStruggle', detail: 'blind-loop', count: r.predictions.attempts - r.predictions.correct });
-  if (r.inhibition.fooled >= 2) out.push({ kind: 'phantomBait', detail: 'phantoms', count: r.inhibition.fooled });
-  if (r.calc.choices - r.calc.correct >= 2) out.push({ kind: 'mathSlip', detail: 'orbs', count: r.calc.choices - r.calc.correct });
-  if (r.recall.taps - r.recall.correct >= 1) out.push({ kind: 'memoryGap', detail: 'runes', count: r.recall.taps - r.recall.correct });
+  if (r.impulsive >= 3) out.push({ kind: 'impulsive', detail: 'input', count: r.impulsive });
+  if (r.feints.fooled >= 2) out.push({ kind: 'feintBait', detail: 'feints', count: r.feints.fooled });
+  if (r.patterns.repeats >= 4 && r.patterns.repeats - r.patterns.repeatOk >= 2) out.push({ kind: 'patternGap', detail: 'boss', count: r.patterns.repeats - r.patterns.repeatOk });
+  if (r.exec.cuts - r.exec.correct >= 1) out.push({ kind: 'execGap', detail: 'exec', count: r.exec.cuts - r.exec.correct });
+  if (r.timing.biasMs !== null && r.timing.biasMs <= -35) out.push({ kind: 'early', detail: 'timing', count: Math.abs(r.timing.biasMs) });
+  if (r.timing.biasMs !== null && r.timing.biasMs >= 35) out.push({ kind: 'late', detail: 'timing', count: r.timing.biasMs });
   return out;
 }

@@ -1,21 +1,25 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 
 /**
- * Chart marks use a validated dark-mode step (OKLCH L inside 0.48–0.67 on #0b0c11);
- * text always uses ink tokens, never the series colour.
+ * Chart marks in the v3 noir palette, checked against the ink surface (#0b0c11):
+ * accent blood 5.3:1, series bone-gray 7.5:1, muted line 3.2:1. One series per chart, so no
+ * legend boxes; emphasis = one mark in blood, the rest in bone-gray. Text always uses ink
+ * tokens (bone / mist), never the mark colour.
  */
 export const CHART = {
-  accent: '#1a96d0',
-  miss: '#ff2a44',
+  accent: '#ff2a44',
+  series: '#9aa0b4',
   muted: '#5c6078',
-  track: '#1b2a36',
+  track: '#1b1c25',
   surface: '#0b0c11',
   grid: '#1c1e28',
+  good: '#eef0f7',
+  bad: '#ff8a99',
 };
 
 /**
  * Single-series sparkline: de-emphasis line, accent end-dot (current run).
- * Touch/hover anywhere to read the nearest value (tooltip never gates — min/max/last
+ * Touch/hover anywhere to read the nearest value (the tooltip never gates — min/max/last
  * are printed beside the chart).
  */
 export function Sparkline({
@@ -27,7 +31,7 @@ export function Sparkline({
   values: number[];
   format: (v: number) => string;
   label: string;
-  /** For metrics where lower is better (reaction ms) the y-axis is flipped so "up" = better. */
+  /** For metrics where lower is better (timing ms) the y-axis is flipped so "up" = better. */
   invert?: boolean;
 }) {
   const [active, setActive] = useState<number | null>(null);
@@ -64,9 +68,9 @@ export function Sparkline({
 
   return (
     <figure className="m-0">
-      <div className="mb-1 flex items-baseline justify-between">
+      <div className="mb-1 flex items-baseline justify-between gap-3">
         <figcaption className="text-[12px] text-mist">{label}</figcaption>
-        <div className="text-[13px] font-semibold text-bone">
+        <div className="shrink-0 text-[13px] font-semibold text-bone">
           {format(values[shown])}
           <span className="ml-2 text-[11px] font-normal text-mist">#{shown + 1}</span>
         </div>
@@ -77,7 +81,7 @@ export function Sparkline({
         role="img"
         aria-label={`${label}: ${values.map(format).join(', ')}`}
         onPointerDown={onPointer}
-        onPointerMove={(e) => e.buttons || e.pointerType === 'mouse' ? onPointer(e) : undefined}
+        onPointerMove={(e) => (e.buttons || e.pointerType === 'mouse' ? onPointer(e) : undefined)}
         onPointerLeave={() => setActive(null)}
       >
         <line x1={0} x2={W} y1={H - 1} y2={H - 1} stroke={CHART.grid} strokeWidth={1} />
@@ -93,35 +97,86 @@ export function Sparkline({
   );
 }
 
-/** Horizontal success bar: accent fill over a same-hue darker track, ≤ 8px thick. */
-export function RatioBar({ label, ok, n }: { label: string; ok: number; n: number }) {
-  const pct = n ? ok / n : 0;
+/** One horizontal bar: square at the baseline, 4 px rounded data end, same-ramp darker track. */
+function Bar({ pct, highlight }: { pct: number; highlight?: boolean }) {
   return (
-    <div className="py-2">
-      <div className="mb-1.5 flex items-baseline justify-between">
-        <span className="text-[13px] text-bone/85">{label}</span>
-        <span className="text-[13px] font-semibold text-bone">
-          {ok}/{n}
-          <span className="ml-2 text-[11px] font-normal text-mist">{n ? Math.round(pct * 100) : 0}%</span>
-        </span>
-      </div>
-      <div className="h-2 w-full overflow-hidden rounded-[4px]" style={{ background: CHART.track }}>
-        <div className="h-full rounded-[4px]" style={{ width: `${pct * 100}%`, background: CHART.accent }} />
-      </div>
+    <div className="h-2 w-full overflow-hidden" style={{ background: CHART.track }}>
+      <div className="h-full rounded-r-[4px]" style={{ width: `${Math.max(0, Math.min(1, pct)) * 100}%`, background: highlight ? CHART.accent : CHART.series }} />
     </div>
   );
 }
 
-export function StatTile({ label, value, delta, deltaGood }: { label: string; value: string; delta?: string; deltaGood?: boolean }) {
+/**
+ * Success ratio with counts. `highlight` marks the one row the story is about (the weak spot):
+ * the bar turns blood and `note` (a label, never colour alone) explains why.
+ */
+export function RatioBar({ label, ok, n, highlight = false, note }: { label: string; ok: number; n: number; highlight?: boolean; note?: ReactNode }) {
+  const pct = n ? ok / n : 0;
   return (
-    <div className="border border-white/[0.07] bg-white/[0.02] px-3.5 py-3">
-      <div className="text-[12px] text-mist">{label}</div>
-      <div className="mt-1 text-[22px] font-semibold leading-tight text-bone">{value}</div>
+    <div className="py-2">
+      <div className="mb-1.5 flex items-baseline justify-between gap-3">
+        <span className="min-w-0 text-[13px] text-bone/85">
+          {label}
+          {note && <span className="ml-2">{note}</span>}
+        </span>
+        <span className="shrink-0 text-[13px] font-semibold text-bone">
+          {ok}/{n}
+          <span className="ml-2 inline-block w-9 text-right text-[11px] font-normal text-mist">{n ? Math.round(pct * 100) : 0}%</span>
+        </span>
+      </div>
+      <Bar pct={pct} highlight={highlight} />
+    </div>
+  );
+}
+
+/** A 0..1 share without counts (aggregates); null renders as a dash. */
+export function MeterRow({ label, value, hint }: { label: string; value: number | null; hint?: string }) {
+  return (
+    <div className="py-2">
+      <div className="mb-1.5 flex items-baseline justify-between gap-3">
+        <span className="min-w-0 text-[13px] text-bone/85">
+          {label}
+          {hint && <span className="block text-[11px] text-mist">{hint}</span>}
+        </span>
+        <span className="shrink-0 text-[13px] font-semibold text-bone">{value === null ? '—' : `${Math.round(value * 100)}%`}</span>
+      </div>
+      <Bar pct={value ?? 0} />
+    </div>
+  );
+}
+
+export function StatTile({
+  label,
+  value,
+  delta,
+  deltaGood,
+  deltaDir,
+  sub,
+  accent = false,
+}: {
+  label: string;
+  value: string;
+  delta?: string;
+  deltaGood?: boolean;
+  /** Arrow direction; defaults to ▲ for good / ▼ for bad. */
+  deltaDir?: 'up' | 'down';
+  /** Secondary line under the value. */
+  sub?: string;
+  /** The tile the story is about (thin blood rule on the left). */
+  accent?: boolean;
+}) {
+  const dir = deltaDir ?? (deltaGood ? 'up' : 'down');
+  return (
+    <div className={`relative min-w-0 border bg-black/35 px-3 py-2.5 ${accent ? 'border-blood/35' : 'border-white/[0.07]'}`}>
+      {accent && <span aria-hidden className="absolute inset-y-2 left-0 w-[2px] bg-blood" />}
+      <div className="truncate text-[11px] leading-tight text-mist">{label}</div>
+      <div className="mt-1 text-[21px] font-semibold leading-tight text-bone">{value}</div>
       {delta && (
-        <div className="mt-0.5 text-[11px]" style={{ color: deltaGood ? '#7fd8ff' : '#ff8a99' }}>
-          {deltaGood ? '▲' : '▼'} {delta}
+        <div className="mt-0.5 text-[11px] leading-tight" style={{ color: deltaGood ? CHART.good : CHART.bad }}>
+          {dir === 'up' ? '▲' : '▼'} {delta}
         </div>
       )}
+      {sub && <div className="mt-0.5 text-[11px] leading-tight text-mist">{sub}</div>}
     </div>
   );
 }

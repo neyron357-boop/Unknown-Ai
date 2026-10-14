@@ -1,0 +1,690 @@
+{
+  "version": 1,
+  "generatedAt": "2026-10-14T15:28:58.684Z",
+  "lines": {
+    "n_episode": {
+      "file": "n_episode.mp3",
+      "durMs": 5125,
+      "speaker": "narrator",
+      "cue": "narr.episode"
+    },
+    "n_roof": {
+      "file": "n_roof.mp3",
+      "durMs": 4876,
+      "speaker": "narrator",
+      "cue": "narr.roof"
+    },
+    "n_fall": {
+      "file": "n_fall.mp3",
+      "durMs": 1319,
+      "speaker": "narrator",
+      "cue": "narr.fall"
+    },
+    "n_train": {
+      "file": "n_train.mp3",
+      "durMs": 4454,
+      "speaker": "narrator",
+      "cue": "narr.train"
+    },
+    "n_boss": {
+      "file": "n_boss.mp3",
+      "durMs": 4233,
+      "speaker": "narrator",
+      "cue": "narr.boss"
+    },
+    "n_victory": {
+      "file": "n_victory.mp3",
+      "durMs": 2695,
+      "speaker": "narrator",
+      "cue": "narr.victory"
+    },
+    "n_bloodlust": {
+      "file": "n_bloodlust.mp3",
+      "durMs": 2513,
+      "speaker": "narrator",
+      "cue": "narr.bloodlust"
+    },
+    "n_reboot": {
+      "file": "n_reboot.mp3",
+      "durMs": 1572,
+      "speaker": "narrator",
+      "cue": "narr.reboot"
+    },
+    "n_cameo": {
+      "file": "n_cameo.mp3",
+      "durMs": 2026,
+      "speaker": "narrator",
+      "cue": "narr.cameo"
+    },
+    "v_intro1": {
+      "file": "v_intro1.mp3",
+      "durMs": 6733,
+      "speaker": "verdict",
+      "cue": "boss.intro"
+    },
+    "v_intro2": {
+      "file": "v_intro2.mp3",
+      "durMs": 5555,
+      "speaker": "verdict",
+      "cue": "boss.intro"
+    },
+    "v_miss1": {
+      "file": "v_miss1.mp3",
+      "durMs": 1265,
+      "speaker": "verdict",
+      "cue": "boss.miss"
+    },
+    "v_miss2": {
+      "file": "v_miss2.mp3",
+      "durMs": 4367,
+      "speaker": "verdict",
+      "cue": "boss.miss"
+    },
+    "v_miss3": {
+      "file": "v_miss3.mp3",
+      "durMs": 2987,
+      "speaker": "verdict",
+      "cue": "boss.miss"
+    },
+    "v_miss4": {
+      "file": "v_miss4.mp3",
+      "durMs": 2423,
+      "speaker": "verdict",
+      "cue": "boss.miss"
+    },
+    "v_perfect1": {
+      "file": "v_perfect1.mp3",
+      "durMs": 920,
+      "speaker": "verdict",
+      "cue": "boss.perfect"
+    },
+    "v_perfect2": {
+      "file": "v_perfect2.mp3",
+      "durMs": 3226,
+      "speaker": "verdict",
+      "cue": "boss.perfect"
+    },
+    "v_perfect3": {
+      "file": "v_perfect3.mp3",
+      "durMs": 998,
+      "speaker": "verdict",
+      "cue": "boss.perfect"
+    },
+    "v_rage1": {
+      "file": "v_rage1.mp3",
+      "durMs": 1937,
+      "speaker": "verdict",
+      "cue": "boss.rage"
+    },
+    "v_rage2": {
+      "file": "v_rage2.mp3",
+      "durMs": 2987,
+      "speaker": "verdict",
+      "cue": "boss.rage"
+    },
+    "v_broken1": {
+      "file": "v_broken1.mp3",
+      "durMs": 2864,
+      "speaker": "verdict",
+      "cue": "boss.broken"
+    },
+    "v_broken2": {
+      "file": "v_broken2.mp3",
+      "durMs": 2575,
+      "speaker": "verdict",
+      "cue": "boss.broken"
+    },
+    "v_exec1": {
+      "file": "v_exec1.mp3",
+      "durMs": 3083,
+      "speaker": "verdict",
+      "cue": "boss.exec"
+    },
+    "v_death": {
+      "file": "v_death.mp3",
+      "durMs": 4224,
+      "speaker": "verdict",
+      "cue": "boss.death"
+    },
+    "v_whisper1": {
+      "file": "v_whisper1.mp3",
+      "durMs": 4705,
+      "speaker": "verdict",
+      "cue": "boss.whisper"
+    },
+    "v_whisper2": {
+      "file": "v_whisper2.mp3",
+      "durMs": 3473,
+      "speaker": "verdict",
+      "cue": "boss.whisper"
+    },
+    "v_whisper3": {
+      "file": "v_whisper3.mp3",
+      "durMs": 3710,
+      "speaker": "verdict",
+      "cue": "boss.whisper"
+    },
+    "v_laugh": {
+      "file": "v_laugh.mp3",
+      "durMs": 2843,
+      "speaker": "verdict",
+      "cue": "boss.laugh"
+    },
+    "v_roar": {
+      "file": "v_roar.mp3",
+      "durMs": 3963,
+      "speaker": "verdict",
+      "cue": "boss.roar"
+    },
+    "e_swipe": {
+      "file": "e_swipe.mp3",
+      "durMs": 2534,
+      "speaker": "echo",
+      "cue": "echo.swipe"
+    },
+    "e_beat": {
+      "file": "e_beat.mp3",
+      "durMs": 3590,
+      "speaker": "echo",
+      "cue": "echo.beat"
+    },
+    "e_brute": {
+      "file": "e_brute.mp3",
+      "durMs": 2054,
+      "speaker": "echo",
+      "cue": "echo.brute"
+    },
+    "e_dodger": {
+      "file": "e_dodger.mp3",
+      "durMs": 1920,
+      "speaker": "echo",
+      "cue": "echo.dodger"
+    },
+    "e_feint": {
+      "file": "e_feint.mp3",
+      "durMs": 3391,
+      "speaker": "echo",
+      "cue": "echo.feint"
+    },
+    "e_leaper": {
+      "file": "e_leaper.mp3",
+      "durMs": 2811,
+      "speaker": "echo",
+      "cue": "echo.leaper"
+    },
+    "e_crawler": {
+      "file": "e_crawler.mp3",
+      "durMs": 2209,
+      "speaker": "echo",
+      "cue": "echo.crawler"
+    },
+    "e_gunner": {
+      "file": "e_gunner.mp3",
+      "durMs": 1278,
+      "speaker": "echo",
+      "cue": "echo.gunner"
+    },
+    "e_duel": {
+      "file": "e_duel.mp3",
+      "durMs": 7656,
+      "speaker": "echo",
+      "cue": "echo.duel"
+    },
+    "e_exec": {
+      "file": "e_exec.mp3",
+      "durMs": 2563,
+      "speaker": "echo",
+      "cue": "echo.exec"
+    },
+    "e_lowhp": {
+      "file": "e_lowhp.mp3",
+      "durMs": 3275,
+      "speaker": "echo",
+      "cue": "echo.lowhp"
+    },
+    "e_praise1": {
+      "file": "e_praise1.mp3",
+      "durMs": 665,
+      "speaker": "echo",
+      "cue": "echo.praise"
+    },
+    "e_praise2": {
+      "file": "e_praise2.mp3",
+      "durMs": 745,
+      "speaker": "echo",
+      "cue": "echo.praise"
+    },
+    "e_combo": {
+      "file": "e_combo.mp3",
+      "durMs": 1654,
+      "speaker": "echo",
+      "cue": "echo.combo"
+    },
+    "e_reboot": {
+      "file": "e_reboot.mp3",
+      "durMs": 1867,
+      "speaker": "echo",
+      "cue": "echo.reboot"
+    },
+    "e_res_s": {
+      "file": "e_res_s.mp3",
+      "durMs": 3707,
+      "speaker": "echo",
+      "cue": "echo.result.S"
+    },
+    "e_res_a": {
+      "file": "e_res_a.mp3",
+      "durMs": 3073,
+      "speaker": "echo",
+      "cue": "echo.result.A"
+    },
+    "e_res_b": {
+      "file": "e_res_b.mp3",
+      "durMs": 2754,
+      "speaker": "echo",
+      "cue": "echo.result.B"
+    },
+    "e_res_c": {
+      "file": "e_res_c.mp3",
+      "durMs": 3317,
+      "speaker": "echo",
+      "cue": "echo.result.C"
+    },
+    "c_in1": {
+      "file": "c_in1.mp3",
+      "durMs": 3056,
+      "speaker": "cleaner",
+      "cue": "cleaner.in"
+    },
+    "c_in2": {
+      "file": "c_in2.mp3",
+      "durMs": 1170,
+      "speaker": "cleaner",
+      "cue": "cleaner.in"
+    },
+    "c_out1": {
+      "file": "c_out1.mp3",
+      "durMs": 3171,
+      "speaker": "cleaner",
+      "cue": "cleaner.out"
+    },
+    "c_out2": {
+      "file": "c_out2.mp3",
+      "durMs": 608,
+      "speaker": "cleaner",
+      "cue": "cleaner.out"
+    },
+    "b_in1": {
+      "file": "b_in1.mp3",
+      "durMs": 4832,
+      "speaker": "butcher",
+      "cue": "butcher.in"
+    },
+    "b_in2": {
+      "file": "b_in2.mp3",
+      "durMs": 3421,
+      "speaker": "butcher",
+      "cue": "butcher.in"
+    },
+    "b_hit": {
+      "file": "b_hit.mp3",
+      "durMs": 5190,
+      "speaker": "butcher",
+      "cue": "butcher.hit"
+    },
+    "b_death": {
+      "file": "b_death.mp3",
+      "durMs": 3881,
+      "speaker": "butcher",
+      "cue": "butcher.death"
+    },
+    "r_in1": {
+      "file": "r_in1.mp3",
+      "durMs": 5572,
+      "speaker": "ronin",
+      "cue": "ronin.in"
+    },
+    "r_in2": {
+      "file": "r_in2.mp3",
+      "durMs": 4387,
+      "speaker": "ronin",
+      "cue": "ronin.in"
+    },
+    "r_out": {
+      "file": "r_out.mp3",
+      "durMs": 5119,
+      "speaker": "ronin",
+      "cue": "ronin.out"
+    },
+    "f_in1": {
+      "file": "f_in1.mp3",
+      "durMs": 833,
+      "speaker": "fox",
+      "cue": "fox.in"
+    },
+    "f_in2": {
+      "file": "f_in2.mp3",
+      "durMs": 1086,
+      "speaker": "fox",
+      "cue": "fox.in"
+    },
+    "f_out": {
+      "file": "f_out.mp3",
+      "durMs": 3983,
+      "speaker": "fox",
+      "cue": "fox.out"
+    },
+    "g_charge1": {
+      "file": "g_charge1.mp3",
+      "durMs": 1019,
+      "speaker": "grunt",
+      "cue": "grunt.charge"
+    },
+    "g_charge1@Algieba": {
+      "file": "g_charge1@Algieba.mp3",
+      "durMs": 935,
+      "speaker": "grunt",
+      "cue": "grunt.charge"
+    },
+    "g_charge1@Sadachbia": {
+      "file": "g_charge1@Sadachbia.mp3",
+      "durMs": 1344,
+      "speaker": "grunt",
+      "cue": "grunt.charge"
+    },
+    "g_charge1@Zubenelgenubi": {
+      "file": "g_charge1@Zubenelgenubi.mp3",
+      "durMs": 836,
+      "speaker": "grunt",
+      "cue": "grunt.charge"
+    },
+    "g_charge1@Rasalgethi": {
+      "file": "g_charge1@Rasalgethi.mp3",
+      "durMs": 856,
+      "speaker": "grunt",
+      "cue": "grunt.charge"
+    },
+    "g_charge2": {
+      "file": "g_charge2.mp3",
+      "durMs": 1007,
+      "speaker": "grunt",
+      "cue": "grunt.charge"
+    },
+    "g_charge2@Algieba": {
+      "file": "g_charge2@Algieba.mp3",
+      "durMs": 987,
+      "speaker": "grunt",
+      "cue": "grunt.charge"
+    },
+    "g_charge2@Sadachbia": {
+      "file": "g_charge2@Sadachbia.mp3",
+      "durMs": 877,
+      "speaker": "grunt",
+      "cue": "grunt.charge"
+    },
+    "g_charge2@Zubenelgenubi": {
+      "file": "g_charge2@Zubenelgenubi.mp3",
+      "durMs": 878,
+      "speaker": "grunt",
+      "cue": "grunt.charge"
+    },
+    "g_charge2@Rasalgethi": {
+      "file": "g_charge2@Rasalgethi.mp3",
+      "durMs": 968,
+      "speaker": "grunt",
+      "cue": "grunt.charge"
+    },
+    "g_charge3": {
+      "file": "g_charge3.mp3",
+      "durMs": 913,
+      "speaker": "grunt",
+      "cue": "grunt.charge"
+    },
+    "g_charge3@Algieba": {
+      "file": "g_charge3@Algieba.mp3",
+      "durMs": 970,
+      "speaker": "grunt",
+      "cue": "grunt.charge"
+    },
+    "g_charge3@Sadachbia": {
+      "file": "g_charge3@Sadachbia.mp3",
+      "durMs": 725,
+      "speaker": "grunt",
+      "cue": "grunt.charge"
+    },
+    "g_charge3@Zubenelgenubi": {
+      "file": "g_charge3@Zubenelgenubi.mp3",
+      "durMs": 1053,
+      "speaker": "grunt",
+      "cue": "grunt.charge"
+    },
+    "g_charge3@Rasalgethi": {
+      "file": "g_charge3@Rasalgethi.mp3",
+      "durMs": 713,
+      "speaker": "grunt",
+      "cue": "grunt.charge"
+    },
+    "g_charge4": {
+      "file": "g_charge4.mp3",
+      "durMs": 1049,
+      "speaker": "grunt",
+      "cue": "grunt.charge"
+    },
+    "g_charge4@Algieba": {
+      "file": "g_charge4@Algieba.mp3",
+      "durMs": 796,
+      "speaker": "grunt",
+      "cue": "grunt.charge"
+    },
+    "g_charge4@Sadachbia": {
+      "file": "g_charge4@Sadachbia.mp3",
+      "durMs": 891,
+      "speaker": "grunt",
+      "cue": "grunt.charge"
+    },
+    "g_charge4@Zubenelgenubi": {
+      "file": "g_charge4@Zubenelgenubi.mp3",
+      "durMs": 1042,
+      "speaker": "grunt",
+      "cue": "grunt.charge"
+    },
+    "g_charge4@Rasalgethi": {
+      "file": "g_charge4@Rasalgethi.mp3",
+      "durMs": 792,
+      "speaker": "grunt",
+      "cue": "grunt.charge"
+    },
+    "g_death1": {
+      "file": "g_death1.mp3",
+      "durMs": 1585,
+      "speaker": "grunt",
+      "cue": "grunt.death"
+    },
+    "g_death1@Algieba": {
+      "file": "g_death1@Algieba.mp3",
+      "durMs": 1694,
+      "speaker": "grunt",
+      "cue": "grunt.death"
+    },
+    "g_death1@Sadachbia": {
+      "file": "g_death1@Sadachbia.mp3",
+      "durMs": 1354,
+      "speaker": "grunt",
+      "cue": "grunt.death"
+    },
+    "g_death1@Zubenelgenubi": {
+      "file": "g_death1@Zubenelgenubi.mp3",
+      "durMs": 2530,
+      "speaker": "grunt",
+      "cue": "grunt.death"
+    },
+    "g_death1@Rasalgethi": {
+      "file": "g_death1@Rasalgethi.mp3",
+      "durMs": 1249,
+      "speaker": "grunt",
+      "cue": "grunt.death"
+    },
+    "g_death2": {
+      "file": "g_death2.mp3",
+      "durMs": 700,
+      "speaker": "grunt",
+      "cue": "grunt.death"
+    },
+    "g_death2@Algieba": {
+      "file": "g_death2@Algieba.mp3",
+      "durMs": 536,
+      "speaker": "grunt",
+      "cue": "grunt.death"
+    },
+    "g_death2@Sadachbia": {
+      "file": "g_death2@Sadachbia.mp3",
+      "durMs": 709,
+      "speaker": "grunt",
+      "cue": "grunt.death"
+    },
+    "g_death2@Zubenelgenubi": {
+      "file": "g_death2@Zubenelgenubi.mp3",
+      "durMs": 541,
+      "speaker": "grunt",
+      "cue": "grunt.death"
+    },
+    "g_death2@Rasalgethi": {
+      "file": "g_death2@Rasalgethi.mp3",
+      "durMs": 374,
+      "speaker": "grunt",
+      "cue": "grunt.death"
+    },
+    "g_death3": {
+      "file": "g_death3.mp3",
+      "durMs": 893,
+      "speaker": "grunt",
+      "cue": "grunt.death"
+    },
+    "g_death3@Algieba": {
+      "file": "g_death3@Algieba.mp3",
+      "durMs": 721,
+      "speaker": "grunt",
+      "cue": "grunt.death"
+    },
+    "g_death3@Sadachbia": {
+      "file": "g_death3@Sadachbia.mp3",
+      "durMs": 2498,
+      "speaker": "grunt",
+      "cue": "grunt.death"
+    },
+    "g_death3@Zubenelgenubi": {
+      "file": "g_death3@Zubenelgenubi.mp3",
+      "durMs": 566,
+      "speaker": "grunt",
+      "cue": "grunt.death"
+    },
+    "g_death3@Rasalgethi": {
+      "file": "g_death3@Rasalgethi.mp3",
+      "durMs": 647,
+      "speaker": "grunt",
+      "cue": "grunt.death"
+    },
+    "g_death4": {
+      "file": "g_death4.mp3",
+      "durMs": 1372,
+      "speaker": "grunt",
+      "cue": "grunt.death"
+    },
+    "g_death4@Algieba": {
+      "file": "g_death4@Algieba.mp3",
+      "durMs": 872,
+      "speaker": "grunt",
+      "cue": "grunt.death"
+    },
+    "g_death4@Sadachbia": {
+      "file": "g_death4@Sadachbia.mp3",
+      "durMs": 3171,
+      "speaker": "grunt",
+      "cue": "grunt.death"
+    },
+    "g_death4@Zubenelgenubi": {
+      "file": "g_death4@Zubenelgenubi.mp3",
+      "durMs": 440,
+      "speaker": "grunt",
+      "cue": "grunt.death"
+    },
+    "g_death4@Rasalgethi": {
+      "file": "g_death4@Rasalgethi.mp3",
+      "durMs": 952,
+      "speaker": "grunt",
+      "cue": "grunt.death"
+    },
+    "g_pain1": {
+      "file": "g_pain1.mp3",
+      "durMs": 1106,
+      "speaker": "grunt",
+      "cue": "grunt.pain"
+    },
+    "g_pain2": {
+      "file": "g_pain2.mp3",
+      "durMs": 1037,
+      "speaker": "grunt",
+      "cue": "grunt.pain"
+    },
+    "br_charge": {
+      "file": "br_charge.mp3",
+      "durMs": 3075,
+      "speaker": "grunt",
+      "cue": "brute.charge"
+    },
+    "gu_fire": {
+      "file": "gu_fire.mp3",
+      "durMs": 852,
+      "speaker": "grunt",
+      "cue": "gunner.fire"
+    },
+    "ch_hey": {
+      "file": "ch_hey.mp3",
+      "durMs": 799,
+      "speaker": "chant",
+      "cue": "chant"
+    },
+    "ch_go": {
+      "file": "ch_go.mp3",
+      "durMs": 851,
+      "speaker": "chant",
+      "cue": "chant"
+    },
+    "ch_ha": {
+      "file": "ch_ha.mp3",
+      "durMs": 603,
+      "speaker": "chant",
+      "cue": "chant"
+    },
+    "ch_rvi": {
+      "file": "ch_rvi.mp3",
+      "durMs": 816,
+      "speaker": "chant",
+      "cue": "chant"
+    },
+    "ch_vai": {
+      "file": "ch_vai.mp3",
+      "durMs": 512,
+      "speaker": "chant",
+      "cue": "chant"
+    },
+    "ch_toma": {
+      "file": "ch_toma.mp3",
+      "durMs": 515,
+      "speaker": "chant",
+      "cue": "chant"
+    },
+    "ch_kill": {
+      "file": "ch_kill.mp3",
+      "durMs": 736,
+      "speaker": "chant",
+      "cue": "chant"
+    },
+    "ch_blood": {
+      "file": "ch_blood.mp3",
+      "durMs": 1155,
+      "speaker": "chant",
+      "cue": "chant"
+    }
+  }
+}

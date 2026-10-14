@@ -1,0 +1,131 @@
+/* Battle HUD v3 — thin, on the edges, out of the way of the fight. */
+
+.hud-font-num {
+  font-family: 'Russo One', 'Arial Black', sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+.hud-font-paint {
+  font-family: 'Rubik Wet Paint', 'Russo One', sans-serif;
+}
+.hud-font-glitch {
+  font-family: 'Rubik Glitch', 'Russo One', sans-serif;
+}
+
+.hud-edges {
+  transition:
+    transform 0.18s cubic-bezier(0.3, 0.7, 0.2, 1),
+    opacity 0.18s linear;
+}
+.hud-cut .hud-edges {
+  transform: translateY(-140%) rotate(-3deg);
+  opacity: 0;
+  transition-duration: 0.08s;
+}
+
+@keyframes hud-glitch {
+  0% { transform: translate(0, 0); text-shadow: 2px 0 #ff2a44, -2px 0 #39d5ff; }
+  20% { transform: translate(-3px, 1px); }
+  40% { transform: translate(3px, -1px); text-shadow: -3px 0 #ff2a44, 3px 0 #39d5ff; }
+  60% { transform: translate(-1px, 2px); }
+  80% { transform: translate(2px, 0); text-shadow: 1px 0 #ff2a44, -1px 0 #39d5ff; }
+  100% { transform: translate(0, 0); }
+}
+.hud-glitch .hud-edges {
+  animation: hud-glitch 0.12s steps(2) infinite;
+}
+
+@keyframes hud-act {
+  0% { opacity: 0; transform: scale(1.35) skewX(-8deg); filter: blur(6px); }
+  12% { opacity: 1; transform: scale(1) skewX(-8deg); filter: blur(0); }
+  78% { opacity: 1; transform: scale(0.97) skewX(-8deg); }
+  100% { opacity: 0; transform: scale(0.94) skewX(-8deg); }
+}
+.hud-act {
+  animation: hud-act 2.3s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+
+@keyframes hud-cutin-l {
+  0% { transform: translateX(-110%) skewY(-6deg); }
+  14% { transform: translateX(0) skewY(-6deg); }
+  82% { transform: translateX(2%) skewY(-6deg); opacity: 1; }
+  100% { transform: translateX(8%) skewY(-6deg); opacity: 0; }
+}
+@keyframes hud-cutin-r {
+  0% { transform: translateX(110%) skewY(6deg); }
+  14% { transform: translateX(0) skewY(6deg); }
+  82% { transform: translateX(-2%) skewY(6deg); opacity: 1; }
+  100% { transform: translateX(-8%) skewY(6deg); opacity: 0; }
+}
+.hud-cutin-left {
+  animation: hud-cutin-l 1.7s cubic-bezier(0.2, 0.9, 0.2, 1) forwards;
+}
+.hud-cutin-right {
+  animation: hud-cutin-r 1.7s cubic-bezier(0.2, 0.9, 0.2, 1) forwards;
+}
+
+@keyframes hud-hit {
+  0% { opacity: 0.95; }
+  100% { opacity: 0; }
+}
+.hud-hit {
+  background: radial-gradient(ellipse at center, transparent 45%, rgba(170, 0, 20, 0.55) 78%, rgba(120, 0, 10, 0.9) 100%);
+  animation: hud-hit 0.42s ease-out forwards;
+}
+
+@keyframes hud-shake {
+  0%, 100% { transform: translateX(0) skewX(-20deg); }
+  25% { transform: translateX(-4px) skewX(-20deg); }
+  50% { transform: translateX(4px) skewX(-20deg); }
+  75% { transform: translateX(-2px) skewX(-20deg); }
+}
+.hud-shake {
+  animation: hud-shake 0.25s linear;
+}
+
+@keyframes hud-lust {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}
+.hud-lust {
+  box-shadow:
+    inset 0 0 60px 12px rgba(255, 10, 30, 0.45),
+    inset 0 0 160px 30px rgba(120, 0, 10, 0.35);
+  animation: hud-lust 0.47s ease-in-out infinite;
+}
+
+@keyframes hud-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.hud-in {
+  animation: hud-in 0.16s ease-out both;
+}
+
+@keyframes hud-bar {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+.hud-bar-fill {
+  transform-origin: left center;
+  animation-name: hud-bar;
+  animation-timing-function: linear;
+  animation-fill-mode: both;
+}
+
+@keyframes hud-toast {
+  0% { opacity: 0; transform: translateY(-6px); }
+  10%, 80% { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0; }
+}
+.hud-toast {
+  animation: hud-toast 1.6s ease-out forwards;
+}
+
+.reduce-motion .hud-glitch .hud-edges,
+.reduce-motion .hud-lust {
+  animation: none;
+}
+.reduce-motion .hud-act {
+  animation-duration: 2.3s;
+  animation-timing-function: linear;
+}

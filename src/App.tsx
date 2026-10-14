@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect } from 'react';
-import { audio } from '@/audio/AudioEngine';
+import { audio3, voice } from '@/audio/bus';
 import { useApp } from '@/state/app';
 import { useSettings } from '@/state/settings';
 import { HubScreen } from '@/ui/screens/HubScreen';
@@ -26,17 +26,28 @@ export function App() {
     return () => window.clearTimeout(t);
   }, []);
 
-  // Keep the audio engine in sync with the settings.
-  useEffect(
-    () =>
-      useSettings.subscribe((s) =>
-        audio.setPrefs({ musicOn: s.musicOn, sfxOn: s.sfxOn, musicVolume: s.musicVolume, sfxVolume: s.sfxVolume, volumeLimit: s.volumeLimit }),
-      ),
-    [],
-  );
+  // Keep the sound system in sync with the settings.
   useEffect(() => {
-    const s = useSettings.getState();
-    audio.setPrefs({ musicOn: s.musicOn, sfxOn: s.sfxOn, musicVolume: s.musicVolume, sfxVolume: s.sfxVolume, volumeLimit: s.volumeLimit });
+    const apply = (s: ReturnType<typeof useSettings.getState>) => {
+      audio3.setPrefs({
+        musicOn: s.musicOn,
+        sfxOn: s.sfxOn,
+        voiceOn: s.voiceOn,
+        musicVolume: s.musicVolume,
+        sfxVolume: s.sfxVolume,
+        voiceVolume: s.voiceVolume,
+        volumeLimit: s.volumeLimit,
+      });
+      voice.setEnabled(s.voiceOn);
+    };
+    apply(useSettings.getState());
+    return useSettings.subscribe(apply);
+  }, []);
+
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    // dev/e2e hooks: drive screens without playing a whole fight
+    Object.assign(window, { __APP__: useApp, __SETTINGS__: useSettings });
   }, []);
 
   useEffect(() => {

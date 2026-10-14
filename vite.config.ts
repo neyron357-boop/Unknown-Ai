@@ -45,7 +45,8 @@ export default defineConfig({
         ],
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
+        // voice/*.mp3 + voice/manifest.json: the character voices play offline too (~2 MB)
+        globPatterns: ['**/*.{js,css,html,svg,png,woff2,mp3,json}'],
         // Only Latin + Cyrillic font subsets are precached for offline play.
         globIgnores: ['**/*-greek-*', '**/*-vietnamese-*', '**/*-latin-ext-*', '**/*-cyrillic-ext-*'],
         // Phaser bundle is large; allow precaching it so the game works offline.

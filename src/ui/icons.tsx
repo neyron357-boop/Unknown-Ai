@@ -72,3 +72,15 @@ export const IconShield = ({ size, ...p }: P) => (
     <path d="M7.5 15a4.5 4.5 0 0 1 9 0" opacity="0.5" />
   </svg>
 );
+/** A katana drawn on the diagonal — the primary "fight" action. */
+export const IconBlade = ({ size, ...p }: P) => (
+  <svg {...base(size)} {...p}>
+    <path d="M20.5 3.5L9 15" strokeWidth={2} />
+    <path d="M7 13l4 4M8.6 15.4l-4.1 4.1" />
+  </svg>
+);
+export const IconMenu = ({ size, ...p }: P) => (
+  <svg {...base(size)} {...p}>
+    <path d="M4 7h16M4 12h16M4 17h10" />
+  </svg>
+);

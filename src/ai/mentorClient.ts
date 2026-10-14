@@ -1,7 +1,6 @@
 import { demoDebrief, type DebriefPayload } from '../../shared/debrief';
 import { detectErrorPatterns, type RunSummary } from '@/cognitive/adaptation';
-import type { MissionResult } from '@/game/core/metrics';
-import type { AttackKind } from '@/game/core/types';
+import type { BattleResult } from '@/game/v3/core/metrics';
 import type { Lang } from '@/state/settings';
 
 export type MentorSource = 'gemini' | 'demo' | 'fallback' | 'offline';
@@ -10,47 +9,55 @@ export type AiStatus = 'live' | 'demo' | 'offline';
 /** Single-file build hosted without the API server: ECHO speaks from local lines only. */
 const STATIC_BUILD = import.meta.env.VITE_TARGET === 'artifact';
 
-/** Builds the compact numeric payload. Nothing identifying leaves the device. */
-export function buildDebriefPayload(result: MissionResult, lang: Lang, previous: RunSummary[]): DebriefPayload {
-  let weakestKind: AttackKind | null = null;
-  let worst = 0;
-  for (const [kind, t] of Object.entries(result.byKind) as [AttackKind, { n: number; ok: number }][]) {
-    const miss = t.n - t.ok;
-    if (t.n >= 2 && miss > worst) {
-      worst = miss;
-      weakestKind = kind;
-    }
-  }
+const int = (v: number, min: number, max: number) => Math.max(min, Math.min(max, Math.round(Number.isFinite(v) ? v : 0)));
+const count = (v: number) => int(v, 0, 10_000);
+const ratio = (v: number) => Math.round(Math.max(0, Math.min(1, Number.isFinite(v) ? v : 0)) * 1000) / 1000;
+const msOrNull = (v: number | null) => (v === null || !Number.isFinite(v) ? null : int(v, 0, 60_000));
+const signedMsOrNull = (v: number | null) => (v === null || !Number.isFinite(v) ? null : int(v, -60_000, 60_000));
+
+/**
+ * Builds the compact numeric payload for ECHO's debrief from a v3 fight result.
+ * `previous` = earlier fights of the same mode (the newest one gives the deltas).
+ * Nothing identifying leaves the device; values are clamped so the server always accepts them.
+ */
+export function buildDebriefPayload(result: BattleResult, lang: Lang, previous: RunSummary[]): DebriefPayload {
   const prev = [...previous].sort((a, b) => b.finishedAt - a.finishedAt)[0];
   return {
     kind: 'debrief',
     lang,
     run: {
       mode: result.mode,
-      durationSec: Math.round(result.durationMs / 1000),
+      durationSec: int(result.durationMs / 1000, 0, 7200),
       grade: result.grade,
-      accuracy: Math.round(result.accuracy * 1000) / 1000,
-      reactionMedianMs: result.reactionMedianMs,
-      timingMs: result.timingMs,
-      blindAttempted: result.predictions.attempts,
-      blindCorrect: result.predictions.correct,
-      phantoms: result.inhibition.phantoms,
-      fooled: result.inhibition.fooled,
-      calcCorrect: result.calc.correct,
-      calcTotal: result.calc.choices,
-      recallCorrect: result.recall.correct,
-      recallTotal: result.recall.taps,
-      maxCombo: result.maxCombo,
-      impulsive: result.impulsive,
-      reboots: result.reboots,
-      bestDecision: result.bestDecision.kind,
-      weakestKind,
+      accuracy: ratio(result.accuracy),
+      timingMeanMs: msOrNull(result.timing.meanAbsMs),
+      timingBiasMs: signedMsOrNull(result.timing.biasMs),
+      kills: count(result.kills),
+      decaps: count(result.decaps),
+      maxCombo: count(result.maxCombo),
+      longestPerfect: count(result.longestPerfect),
+      feintsTotal: count(result.feints.total),
+      feintsFooled: count(result.feints.fooled),
+      patternRepeats: count(result.patterns.repeats),
+      patternOk: count(result.patterns.repeatOk),
+      execCuts: count(result.exec.cuts),
+      execCorrect: count(result.exec.correct),
+      hitsTaken: count(result.hitsTaken),
+      reboots: count(result.reboots),
+      impulsive: count(result.impulsive),
+      best: result.best.kind,
+      weakestKind: result.weakestKind,
     },
     history: prev
-      ? { runs: previous.length, previousAccuracy: Math.round(prev.result.accuracy * 1000) / 1000, previousReactionMs: prev.result.reactionMedianMs }
+      ? { runs: count(previous.length), previousAccuracy: ratio(prev.result.accuracy), previousTimingMs: msOrNull(prev.result.timing.meanAbsMs) }
       : undefined,
     patterns: [...new Set(detectErrorPatterns(result).map((p) => p.kind))],
   };
+}
+
+/** The local line (no network): AI lines switched off, static build, or a failed request. */
+export function localDebrief(payload: DebriefPayload): { text: string; source: MentorSource } {
+  return { text: demoDebrief(payload), source: 'offline' };
 }
 
 /** Asks the server for ECHO's debrief. Always resolves — falls back to a local line. */
@@ -67,9 +74,9 @@ export async function fetchDebrief(payload: DebriefPayload, timeoutMs = 6000): P
     });
     const data = (await res.json().catch(() => null)) as { text?: string; source?: MentorSource } | null;
     if (data?.text && typeof data.text === 'string') return { text: data.text, source: data.source ?? 'fallback' };
-    return { text: demoDebrief(payload), source: 'offline' };
+    return localDebrief(payload);
   } catch {
-    return { text: demoDebrief(payload), source: 'offline' };
+    return localDebrief(payload);
   } finally {
     clearTimeout(timer);
   }

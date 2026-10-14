@@ -1,6 +1,6 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
-import type { Checkpoint } from '@/game/core/director';
-import type { ModeId } from '@/game/core/types';
+import type { BattleCheckpoint } from '@/game/v3/core/battle';
+import type { ModeId } from '@/game/v3/core/types';
 import type { RunSummary } from './adaptation';
 
 /**
@@ -56,8 +56,8 @@ export async function saveRun(run: RunSummary): Promise<void> {
 
 export async function loadRuns(): Promise<RunSummary[]> {
   const d = await db();
-  // Runs from the first prototype used a different result shape — ignore them.
-  return (await d.getAllFromIndex('runs', 'byFinished')).filter((r) => (r.result as { version?: number }).version === 2);
+  // Runs from earlier prototypes used a different result shape — ignore them.
+  return (await d.getAllFromIndex('runs', 'byFinished')).filter((r) => (r.result as { version?: number }).version === 3);
 }
 
 export async function logChoice(event: Omit<ChoiceEvent, 'id'>): Promise<void> {
@@ -70,17 +70,17 @@ export async function loadChoices(): Promise<ChoiceEvent[]> {
   return d.getAll('choices');
 }
 
-const CHECKPOINT_KEY = 'checkpoint:awakening';
+const CHECKPOINT_KEY = 'checkpoint:bloodmoon';
 
-export async function saveCheckpoint(cp: Checkpoint): Promise<void> {
+export async function saveCheckpoint(cp: BattleCheckpoint): Promise<void> {
   const d = await db();
   await d.put('kv', cp, CHECKPOINT_KEY);
 }
 
-export async function loadCheckpoint(): Promise<Checkpoint | null> {
+export async function loadCheckpoint(): Promise<BattleCheckpoint | null> {
   const d = await db();
-  const cp = (await d.get('kv', CHECKPOINT_KEY)) as Checkpoint | undefined;
-  if (!cp || cp.version !== 2) return null;
+  const cp = (await d.get('kv', CHECKPOINT_KEY)) as BattleCheckpoint | undefined;
+  if (!cp || cp.version !== 3) return null;
   // Stale checkpoints (older than 7 days) are discarded quietly.
   if (Date.now() - cp.savedAt > 7 * 24 * 3600 * 1000) return null;
   return cp;

@@ -1,6 +1,8 @@
-// End-to-end smoke test: real DOM gestures, then a scripted bot plays the whole duel
-// in a mobile-sized Chromium, through upgrades, results, the ECHO debrief and the stats screen.
-// Requires the dev server (`npm run dev`) — it uses the dev-only hook window.__UNKNOWN_SESSION__.
+// End-to-end smoke test of v3 in a mobile-sized Chromium: the 18+ gate, the first tap that unlocks
+// audio, real touch swipes reaching the director, then a bot that plays the whole fight (waves,
+// cameo, boss duel, execution) on the beat, the results screen with ECHO's debrief and the
+// progress screen. Gemini endpoints are mocked, so no quota is spent.
+// Requires the dev server (`npm run dev`) — it uses the dev-only hooks window.__SESSION__ etc.
 // Usage: npm run e2e            (BASE_URL defaults to http://localhost:5173)
 import { chromium } from 'playwright';
 
@@ -17,6 +19,14 @@ const page = await ctx.newPage();
 const errors = [];
 page.on('pageerror', (e) => errors.push(e.message));
 page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
+const aiCalls = [];
+await page.route('**/api/ai/**', (route) => {
+  const url = route.request().url();
+  aiCalls.push(url.slice(url.indexOf('/api/')));
+  if (url.endsWith('/status')) return route.fulfill({ json: { mode: 'demo', voice: 'demo', episode: 'demo' } });
+  if (url.endsWith('/mentor')) return route.fulfill({ json: { text: 'Чистая работа. Дальше — быстрее.', source: 'demo' } });
+  return route.fulfill({ status: 503, json: { error: 'demo' } });
+});
 
 await page.goto(BASE);
 await page.evaluate(() => {
@@ -24,23 +34,29 @@ await page.evaluate(() => {
   indexedDB.deleteDatabase('unknown-ascension');
 });
 await page.reload();
-await page.getByText('Коснись, чтобы пробудиться').waitFor();
-check((await page.evaluate(() => window.__UNKNOWN_AUDIO__?.state)) === 'none', 'no audio before the first gesture');
-await page.mouse.click(195, 600);
-await page.waitForFunction(() => !!window.__UNKNOWN_SESSION__, null, { timeout: 20000 });
-check((await page.evaluate(() => window.__UNKNOWN_AUDIO__?.state)) === 'running', 'audio unlocked by the first tap');
 
-// 1) Real pointer events on the arena → the five actions reach the director.
+// 1) 18+ gate → title → straight into the first fight (two taps)
+await page.getByRole('button', { name: 'Мне есть 18 — в бой' }).waitFor();
+check((await page.evaluate(() => window.__UNKNOWN_AUDIO__?.state)) === 'none', 'no audio before the first gesture');
+await page.getByRole('button', { name: 'Мне есть 18 — в бой' }).click();
+await page.getByRole('button', { name: 'Коснись — луна ждёт' }).waitFor();
+await page.waitForTimeout(800);
+await page.mouse.click(195, 600);
+await page.waitForFunction(() => !!window.__SESSION__, null, { timeout: 20000 });
+check((await page.evaluate(() => window.__UNKNOWN_AUDIO__?.state)) === 'running', 'audio unlocked by the first taps');
+check(true, '18+ gate → title → fight in two taps');
+
+// 2) Real touch swipes on the arena → slashes reach the director
 await page.evaluate(() => {
-  const d = window.__UNKNOWN_SESSION__.director;
-  window.__acts = [];
+  const d = window.__SESSION__.director;
+  window.__dirs = [];
   const orig = d.input.bind(d);
-  d.input = (a, t) => {
-    window.__acts.push(a);
-    return orig(a, t);
+  d.input = (dir, t) => {
+    window.__dirs.push(dir);
+    return orig(dir, t);
   };
 });
-const gesture = (dx, dy) =>
+const swipe = (dx, dy) =>
   page.evaluate(
     ([dx, dy]) => {
       const el = document.querySelector('[data-testid=arena]');
@@ -48,30 +64,29 @@ const gesture = (dx, dy) =>
       const ev = (type, x, y) =>
         el.dispatchEvent(new PointerEvent(type, { pointerId: 3, pointerType: 'touch', clientX: r.left + x, clientY: r.top + y, bubbles: true, cancelable: true, isPrimary: true }));
       ev('pointerdown', 195, 560);
-      if (dx || dy) {
-        ev('pointermove', 195 + dx * 0.5, 560 + dy * 0.5);
-        ev('pointermove', 195 + dx, 560 + dy);
-      }
+      ev('pointermove', 195 + dx * 0.5, 560 + dy * 0.5);
+      ev('pointermove', 195 + dx, 560 + dy);
       ev('pointerup', 195 + dx, 560 + dy);
     },
     [dx, dy],
   );
-for (const [dx, dy] of [[0, 0], [0, -80], [0, 80], [-80, 0], [80, 0]]) {
-  await gesture(dx, dy);
-  await page.waitForTimeout(250);
+for (const [dx, dy] of [[-90, 0], [90, 0], [0, -90], [0, 90]]) {
+  await swipe(dx, dy);
+  await page.waitForTimeout(200);
 }
-const acts = await page.evaluate(() => window.__acts.splice(0));
-check(JSON.stringify(acts) === JSON.stringify(['tap', 'up', 'down', 'left', 'right']), `tap, swipe ↑ ↓ ← → recognised: ${acts.join(', ')}`);
+const dirs = await page.evaluate(() => window.__dirs.splice(0));
+check(JSON.stringify(dirs) === JSON.stringify(['left', 'right', 'up', 'down']), `swipes ← → ↑ ↓ recognised: ${dirs.join(', ')}`);
 
-// 2) Bot. The director is stepped in 16 ms slices and the bot answers at the exact musical
-// timestamp, so the run is frame-rate independent on a software-rendered headless browser.
+// 3) Bot: the director is stepped in 16 ms slices and every real note is answered at its exact
+// beat (in the direction the player sees), so the run is frame-rate independent on a
+// software-rendered headless browser. Feints are left alone; the execution is repeated.
 await page.evaluate(() => {
-  const s = window.__UNKNOWN_SESSION__;
-  const d = s.director;
-  const R = { mid: 'tap', high: 'down', low: 'up' };
+  const d = window.__SESSION__.director;
+  const OPP = { left: 'right', right: 'left', up: 'up', down: 'down' };
   const pending = [];
-  const runes = [];
-  window.__bot = { offers: 0, rounds: [] };
+  const exec = [];
+  window.__bot = { segments: [], kills: 0, boss: [] };
+  const answer = (at, dir) => pending.push({ at, fn: () => d.input(d.isMirrored(at) && (dir === 'left' || dir === 'right') ? OPP[dir] : dir, at) });
   const orig = d.update.bind(d);
   d.update = (dt) => {
     while (dt > 0) {
@@ -79,62 +94,51 @@ await page.evaluate(() => {
       orig(step);
       dt -= step;
       const now = d.getNow();
-      for (let i = pending.length - 1; i >= 0; i--) {
-        if (pending[i].at <= now) pending.splice(i, 1)[0].fn();
-      }
+      for (let i = pending.length - 1; i >= 0; i--) if (pending[i].at <= now) pending.splice(i, 1)[0].fn();
     }
   };
   d.on((e) => {
-    if (e.type === 'round') window.__bot.rounds.push(e.kind);
-    if (e.type === 'windup' && !e.phantom) pending.push({ at: e.impactAt, fn: () => d.input(R[e.strikeKind], e.impactAt) });
-    if (e.type === 'open') e.beats.forEach((b) => pending.push({ at: b, fn: () => d.input('tap', b) }));
-    if (e.type === 'orbs') {
-      const v = (o) => (o.op === '+' ? e.energy + o.n : o.op === '×' ? e.energy * o.n : e.energy - o.n);
-      pending.push({ at: e.at + 600, fn: () => d.input(v(e.left) >= v(e.right) ? 'left' : 'right', d.getNow()) });
-    }
-    if (e.type === 'rune' && e.pass === 0) runes.push(e.node);
-    if (e.type === 'recall') runes.splice(0).forEach((n, k) => pending.push({ at: d.getNow() + 400 * (k + 1), fn: () => d.tapNode(n, d.getNow()) }));
-    if (e.type === 'upgradeOffer') window.__bot.offers++;
+    if (e.type === 'segment') window.__bot.segments.push(e.id);
+    if (e.type === 'kill' && e.by === 'hero') window.__bot.kills++;
+    if (e.type === 'boss') window.__bot.boss.push(e.phase);
+    if (e.type === 'spawn') for (const n of e.enemy.notes) if (!n.feint && !n.assist) answer(n.at, n.dir);
+    if (e.type === 'bossMove' && !e.note.feint) answer(e.note.at, e.note.dir);
+    if (e.type === 'execShow') exec[e.index] = e.dir;
+    if (e.type === 'execPerform') exec.forEach((dir, i) => answer(e.at + i * d.beatMs, dir));
   });
 });
 
-// Upgrade cards are real buttons: pick the first one whenever they appear.
-const deadline = Date.now() + 8 * 60_000;
-let picked = 0;
+const deadline = Date.now() + 10 * 60_000;
 let lastLog = Date.now();
 while (Date.now() < deadline) {
+  if (await page.getByRole('button', { name: /Ещё раз/ }).isVisible().catch(() => false)) break;
   if (Date.now() - lastLog > 30_000) {
     lastLog = Date.now();
     const st = await page.evaluate(() => {
-      const d = window.__UNKNOWN_SESSION__?.director;
-      return d ? `${d.getPhase()} · round ${d.getRound()?.kind ?? '—'} · t=${Math.round(d.getNow() / 1000)}s` : 'no session';
+      const d = window.__SESSION__?.director;
+      return d ? `${d.getPhase()} · ${d.getSegment().id} · t=${Math.round(d.getNow() / 1000)}s` : 'no session';
     });
     console.log('    …', st);
   }
-  if (await page.getByText('ЭВОЛЮЦИЯ').isVisible().catch(() => false)) break;
-  const title = page.getByText('ВЫБЕРИ СИЛУ', { exact: true });
-  if (await title.isVisible().catch(() => false)) {
-    await title.locator('xpath=..').locator('button').first().click({ timeout: 3000 }).catch(() => {});
-    picked++;
-    await page.waitForTimeout(600);
-  }
-  await page.waitForTimeout(150);
+  await page.waitForTimeout(500);
 }
-await page.getByText('ЭВОЛЮЦИЯ').waitFor({ timeout: 10_000 });
+await page.getByRole('button', { name: /Ещё раз/ }).waitFor({ timeout: 10_000 });
 const bot = await page.evaluate(() => window.__bot);
-check(JSON.stringify(bot.rounds) === JSON.stringify(['takt', 'phantoms', 'overcharge', 'ascension']), `all four rounds played: ${bot.rounds.join(' → ')}`);
-check(bot.offers === 3 && picked >= 1, `upgrade cards offered ${bot.offers}× (picked by tap ${picked}×)`);
-check(true, 'mission played to the end → EVOLUTION screen');
+const acts = ['roofA', 'fall', 'trainA', 'cameo', 'bossIntro', 'duel', 'rage', 'exec', 'finale'];
+check(acts.every((a) => bot.segments.includes(a)), `whole mission played: ${bot.segments.join(' → ')}`);
+check(bot.kills >= 40, `enemies cut down by the hero: ${bot.kills}`);
+check(bot.boss.includes('dead'), `boss killed (${bot.boss.join(', ')})`);
 await page.waitForTimeout(2500);
 const text = await page.locator('body').innerText();
 const acc = Number(/Точность\s+(\d+)%/.exec(text)?.[1] ?? -1);
 check(acc >= 95, `bot accuracy recorded: ${acc}%`);
-const grade = /ПРОБУЖДЕНИЕ\s+([SABC])\s/.exec(text)?.[1];
-check(grade === 'S', `grade for a flawless bot: ${grade}`);
-check(/ЭХО/.test(text), 'ECHO debrief shown (Gemini, demo or local)');
-await page.getByText('Подробнее').click();
+const run = await page.evaluate(() => window.__APP__.getState().lastRun);
+check(run?.result.grade === 'S', `grade for a flawless bot: ${run?.result.grade}`);
+check(/ЭХО/.test(text) && text.includes('Чистая работа'), 'ECHO debrief shown');
+await page.getByRole('button', { name: /Прогресс/ }).click();
 await page.getByRole('heading', { name: 'Прогресс' }).waitFor();
-check((await page.locator('body').innerText()).includes('Забегов'), 'progress screen lists the saved run');
+check((await page.locator('body').innerText()).includes('Боёв'), 'progress screen lists the saved run');
+check(aiCalls.some((c) => c.endsWith('/mentor')), `AI endpoints called with numbers only (mocked): ${[...new Set(aiCalls)].join(', ')}`);
 check(errors.length === 0, `no console errors${errors.length ? ': ' + errors.join(' | ') : ''}`);
 await browser.close();
 console.log(failed ? `\n${failed} check(s) failed` : '\nAll e2e checks passed');

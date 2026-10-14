@@ -1,6 +1,9 @@
 @import 'tailwindcss';
 @import '@fontsource-variable/unbounded/wght.css';
 @import '@fontsource-variable/inter/wght.css';
+@import '@fontsource/rubik-wet-paint/400.css';
+@import '@fontsource/russo-one/400.css';
+@import '@fontsource/rubik-glitch/400.css';
 
 @theme {
   --font-display: 'Unbounded Variable', 'Arial Black', system-ui, sans-serif;
@@ -300,3 +303,198 @@ input[type='range'].slider::-moz-range-thumb {
 }
 .anim-swipe-u { animation: swipe-u 0.9s ease-in-out infinite; }
 .anim-swipe-d { animation: swipe-d 0.9s ease-in-out infinite; }
+
+/* ======================================================================
+   v3 menus — noir + blood (additive)
+   ====================================================================== */
+
+/* type */
+.font-cut {
+  font-family: 'Russo One', var(--font-display);
+  font-weight: 400;
+}
+.font-blood {
+  font-family: 'Rubik Wet Paint', 'Russo One', var(--font-display);
+  font-weight: 400;
+}
+.font-glitch {
+  font-family: 'Rubik Glitch', 'Russo One', var(--font-display);
+  font-weight: 400;
+}
+.glow-moon {
+  text-shadow: 0 0 18px rgba(255, 32, 58, 0.75), 0 0 54px rgba(255, 32, 58, 0.3);
+}
+.glow-ash {
+  text-shadow: 0 0 22px rgba(255, 255, 255, 0.35), 0 2px 0 rgba(120, 0, 18, 0.9);
+}
+
+/* blade-cut corners for primary actions */
+.cut-corners {
+  clip-path: polygon(12px 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%, 0 12px);
+}
+.cut-corners-sm {
+  clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
+}
+
+/* focus ring in the v3 palette (clip-path hides outlines, so an inset ring is used there) */
+.focus-bone:focus-visible {
+  outline: 2px solid var(--color-bone);
+  outline-offset: 3px;
+}
+.focus-inset:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--color-bone);
+}
+
+/* blood moon */
+.bd-moon {
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 64% 68%, rgba(60, 0, 10, 0.42), transparent 13%),
+    radial-gradient(circle at 28% 60%, rgba(60, 0, 10, 0.3), transparent 9%),
+    radial-gradient(circle at 50% 28%, rgba(70, 0, 12, 0.26), transparent 16%),
+    radial-gradient(circle at 74% 38%, rgba(60, 0, 10, 0.22), transparent 8%),
+    radial-gradient(circle at 36% 34%, #ff6466 0%, #e8172f 30%, #a80b24 62%, #520513 100%);
+  box-shadow:
+    0 0 36px 4px rgba(255, 34, 60, 0.5),
+    0 0 120px 40px rgba(160, 10, 32, 0.32),
+    inset -16px -12px 36px rgba(24, 0, 6, 0.6);
+}
+.bd-moon-glow {
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 40, 70, 0.28), rgba(255, 40, 70, 0) 68%);
+  animation: moon-breathe 7s ease-in-out infinite;
+}
+@keyframes moon-breathe {
+  0%, 100% { opacity: 0.55; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.06); }
+}
+
+/* rain: two tiled layers falling (compositor-only transforms), tilted by the container */
+.bd-rain {
+  position: absolute;
+  inset: -30% -20%;
+  transform: rotate(14deg);
+  overflow: hidden;
+}
+.bd-rain::before,
+.bd-rain::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  will-change: transform;
+}
+.bd-rain::before {
+  top: -240px;
+  bottom: 0;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='90' height='240'><g stroke='%23c9d2e6' stroke-linecap='round'><line x1='8' y1='10' x2='8' y2='44' stroke-opacity='.55'/><line x1='31' y1='120' x2='31' y2='146' stroke-opacity='.4'/><line x1='52' y1='60' x2='52' y2='98' stroke-opacity='.5'/><line x1='74' y1='170' x2='74' y2='200' stroke-opacity='.45'/><line x1='63' y1='6' x2='63' y2='24' stroke-opacity='.3'/><line x1='19' y1='190' x2='19' y2='222' stroke-opacity='.35'/></g></svg>");
+  background-size: 90px 240px;
+  animation: rain-near 0.62s linear infinite;
+  opacity: 0.22;
+}
+.bd-rain::after {
+  top: -300px;
+  bottom: 0;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='140' height='300'><g stroke='%23aab4cc' stroke-linecap='round' stroke-width='.7'><line x1='12' y1='30' x2='12' y2='50' stroke-opacity='.5'/><line x1='47' y1='150' x2='47' y2='168' stroke-opacity='.45'/><line x1='88' y1='90' x2='88' y2='112' stroke-opacity='.5'/><line x1='120' y1='220' x2='120' y2='238' stroke-opacity='.4'/><line x1='70' y1='260' x2='70' y2='276' stroke-opacity='.35'/></g></svg>");
+  background-size: 140px 300px;
+  animation: rain-far 1.15s linear infinite;
+  opacity: 0.16;
+}
+@keyframes rain-near {
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(0, 240px, 0); }
+}
+@keyframes rain-far {
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(0, 300px, 0); }
+}
+
+/* entrances */
+@keyframes slash-in {
+  from { clip-path: inset(0 100% 0 0); }
+  to { clip-path: inset(0 0 0 0); }
+}
+.anim-slash {
+  animation: slash-in 0.55s cubic-bezier(0.7, 0, 0.2, 1) both;
+}
+@keyframes blade-sweep {
+  0% { transform: scaleX(0); transform-origin: left; opacity: 1; }
+  55% { transform: scaleX(1); transform-origin: left; opacity: 1; }
+  100% { transform: scaleX(1); opacity: 0.35; }
+}
+.anim-blade {
+  animation: blade-sweep 0.9s cubic-bezier(0.7, 0, 0.2, 1) both;
+}
+@keyframes whisper-in {
+  from { opacity: 0; filter: blur(5px); letter-spacing: 0.08em; }
+  to { opacity: 1; filter: blur(0); letter-spacing: 0.01em; }
+}
+.anim-whisper {
+  animation: whisper-in 1.4s ease-out both;
+}
+@keyframes stamp {
+  0% { opacity: 0; transform: scale(1.9) rotate(-10deg); filter: blur(8px); }
+  55% { opacity: 1; transform: scale(0.93) rotate(-3deg); filter: blur(0); }
+  100% { opacity: 1; transform: scale(1) rotate(-4deg); }
+}
+.anim-stamp {
+  animation: stamp 0.5s cubic-bezier(0.2, 0.9, 0.2, 1) both;
+}
+@keyframes drip {
+  from { transform: scaleY(0); }
+  to { transform: scaleY(1); }
+}
+.anim-drip {
+  transform-origin: top;
+  animation: drip 1.6s cubic-bezier(0.5, 0, 0.3, 1) both;
+}
+@keyframes caret {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+.anim-caret {
+  animation: caret 1s steps(1) infinite;
+}
+
+/* range slider in blood */
+input[type='range'].slider.slider-blood {
+  height: 44px;
+}
+input[type='range'].slider.slider-blood::-webkit-slider-runnable-track {
+  background: linear-gradient(90deg, var(--color-blood) var(--fill, 50%), #26272f var(--fill, 50%));
+}
+input[type='range'].slider.slider-blood::-moz-range-progress {
+  background: var(--color-blood);
+}
+input[type='range'].slider.slider-blood::-webkit-slider-thumb {
+  box-shadow: 0 0 0 4px rgba(255, 42, 68, 0.22), 0 0 14px rgba(255, 42, 68, 0.55);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bd-rain,
+  .bd-moon-glow,
+  .anim-caret {
+    animation: none;
+  }
+  .bd-rain::before,
+  .bd-rain::after {
+    animation: none;
+  }
+}
+.reduce-motion .bd-rain::before,
+.reduce-motion .bd-rain::after,
+.reduce-motion .bd-moon-glow,
+.reduce-motion .anim-slash,
+.reduce-motion .anim-blade,
+.reduce-motion .anim-whisper,
+.reduce-motion .anim-stamp,
+.reduce-motion .anim-drip,
+.reduce-motion .anim-caret {
+  animation: none !important;
+}
+.still .bd-rain::before,
+.still .bd-rain::after,
+.still .bd-moon-glow {
+  animation: none !important;
+}
